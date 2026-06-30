@@ -1,4 +1,4 @@
-package com.sbiappnew
+package com.sbiapp
 
 import android.app.Application
 import com.facebook.react.PackageList

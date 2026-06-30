@@ -15,9 +15,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-               BuildableName = "SBIAppNew.app"
-               BlueprintName = "SBIAppNew"
-               ReferencedContainer = "container:SBIAppNew.xcodeproj">
+               BuildableName = "SBIApp.app"
+               BlueprintName = "SBIApp"
+               ReferencedContainer = "container:SBIApp.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -33,9 +33,9 @@
             <BuildableReference
                BuildableIdentifier = "primary"
                BlueprintIdentifier = "00E356ED1AD99517003FC87E"
-               BuildableName = "SBIAppNewTests.xctest"
-               BlueprintName = "SBIAppNewTests"
-               ReferencedContainer = "container:SBIAppNew.xcodeproj">
+               BuildableName = "SBIAppTests.xctest"
+               BlueprintName = "SBIAppTests"
+               ReferencedContainer = "container:SBIApp.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -55,9 +55,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "SBIAppNew.app"
-            BlueprintName = "SBIAppNew"
-            ReferencedContainer = "container:SBIAppNew.xcodeproj">
+            BuildableName = "SBIApp.app"
+            BlueprintName = "SBIApp"
+            ReferencedContainer = "container:SBIApp.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -72,9 +72,9 @@
          <BuildableReference
             BuildableIdentifier = "primary"
             BlueprintIdentifier = "13B07F861A680F5B00A75B9A"
-            BuildableName = "SBIAppNew.app"
-            BlueprintName = "SBIAppNew"
-            ReferencedContainer = "container:SBIAppNew.xcodeproj">
+            BuildableName = "SBIApp.app"
+            BlueprintName = "SBIApp"
+            ReferencedContainer = "container:SBIApp.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>
