@@ -1,0 +1,57 @@
+# render.yaml
+services:
+  - type: web
+    name: sbi-backend
+    runtime: docker
+    plan: starter
+    repo: https://github.com/Hash3Co/sbi-backend
+    branch: main
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DEBUG
+        value: false
+      - key: DB_HOST
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_NAME
+        value: postgres
+      - key: DB_PORT
+        value: 5432
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_STORAGE_BUCKET_NAME
+        value: sbi-media
+      - key: REDIS_URL
+        sync: false
+    healthCheckPath: /health/
+    autoDeploy: true
+
+  - type: worker
+    name: sbi-celery-worker
+    runtime: docker
+    repo: https://github.com/Hash3Co/sbi-backend
+    branch: main
+    dockerfilePath: ./Dockerfile
+    command: celery -A sbi_backend worker --loglevel=info
+    envVars:
+      - key: REDIS_URL
+        sync: false
+      - key: DB_HOST
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false

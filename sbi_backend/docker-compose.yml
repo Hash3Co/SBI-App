@@ -1,0 +1,38 @@
+# docker-compose.yml
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      - DJANGO_SETTINGS_MODULE=sbi_backend.settings
+    env_file:
+      - .env
+    volumes:
+      - ./staticfiles:/app/staticfiles
+      - ./media:/app/media
+      - ./logs:/app/logs
+    command: gunicorn --bind 0.0.0.0:8000 --workers 4 --threads 2 sbi_backend.wsgi:application
+    restart: unless-stopped
+
+  celery-worker:
+    build: .
+    env_file:
+      - .env
+    command: celery -A sbi_backend worker --loglevel=info
+    restart: unless-stopped
+
+  celery-beat:
+    build: .
+    env_file:
+      - .env
+    command: celery -A sbi_backend beat --loglevel=info
+    restart: unless-stopped
+
+  redis:
+    image: redis:alpine
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
