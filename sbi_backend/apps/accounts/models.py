@@ -4,6 +4,7 @@ import uuid
 
 class User(AbstractUser):
     """Custom user model - simplified"""
+    supabase_id = models.CharField(max_length=255, blank=True, null=True, unique=True)
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     

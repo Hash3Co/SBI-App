@@ -1,9 +1,11 @@
+# apps/payments/views.py
 from rest_framework import generics, status, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.core.cache import cache
 from django.utils import timezone
 import stripe
+from django.conf import settings
 
 from .models import SubscriptionPlan, Subscription, Transaction, PaymentMethod
 from .serializers import (
@@ -12,9 +14,15 @@ from .serializers import (
     CreateSubscriptionSerializer, CancelSubscriptionSerializer
 )
 from apps.accounts.permissions import IsSME, IsInvestor
-from django.conf import settings
 
-stripe.api_key = settings.STRIPE_SECRET_KEY
+# Initialize Stripe with better error handling
+try:
+    stripe.api_key = settings.STRIPE_SECRET_KEY
+    print("✅ Stripe initialized successfully")
+except AttributeError:
+    # Set a dummy key if STRIPE_SECRET_KEY is not set
+    stripe.api_key = "sk_test_dummy_key_1234567890"
+    print("⚠️  Stripe running in dummy mode - no real payments will process")
 
 
 class SubscriptionPlanListView(generics.ListAPIView):
@@ -56,6 +64,13 @@ class CreateSubscriptionView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     
     def post(self, request):
+        # Check if Stripe is configured
+        if not settings.STRIPE_SECRET_KEY or settings.STRIPE_SECRET_KEY.startswith('sk_test_dummy'):
+            return Response({
+                'error': 'Stripe is not configured. Please set STRIPE_SECRET_KEY in your .env file.',
+                'hint': 'Get test keys from https://dashboard.stripe.com/test/apikeys'
+            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        
         serializer = CreateSubscriptionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
@@ -137,7 +152,11 @@ class CancelSubscriptionView(APIView):
             
             # Cancel in Stripe
             if subscription.stripe_subscription_id:
-                stripe.Subscription.delete(subscription.stripe_subscription_id)
+                try:
+                    stripe.Subscription.delete(subscription.stripe_subscription_id)
+                except stripe.error.StripeError as e:
+                    # Log the error but still cancel locally
+                    print(f"Stripe cancellation error: {e}")
             
             subscription.status = 'canceled'
             subscription.canceled_at = timezone.now()

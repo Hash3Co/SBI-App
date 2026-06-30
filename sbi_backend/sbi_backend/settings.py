@@ -8,19 +8,14 @@ import dj_database_url
 from dotenv import load_dotenv
 
 APPEND_SLASH = True
-
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-
 ROOT_URLCONF = 'sbi_backend.urls'
 
-# ============ ENVIRONMENT CONFIGURATION ============
+# ============ ENVIRONMENT ============
 ENVIRONMENT = config('ENVIRONMENT', default='development')
-
-# SECURITY
-SECRET_KEY = config('SECRET_KEY', default='django-insecure-test-key-change-in-production-12345678901234567890')
-
+SECRET_KEY = config('SECRET_KEY')
 DEBUG = config('DEBUG', default=True, cast=bool)
 
 ALLOWED_HOSTS = config(
@@ -28,41 +23,55 @@ ALLOWED_HOSTS = config(
     default='127.0.0.1,localhost,*.onrender.com,192.168.56.1,192.168.43.224'
 ).split(',')
 
-# ============ DATABASE CONFIGURATION - SUPABASE ONLY ============
-# Primary database connection using DATABASE_URL
+# ============ SUPABASE CONFIGURATION ============
+SUPABASE_URL = config('SUPABASE_URL')
+SUPABASE_PUBLISHABLE_KEY = config('SUPABASE_PUBLISHABLE_KEY')
+SUPABASE_SECRET_KEY = config('SUPABASE_SECRET_KEY')
+SUPABASE_JWKS_URL = config('SUPABASE_JWKS_URL')
+
+# ============ DATABASE - SUPABASE ============
+# Try DATABASE_URL first
 DATABASE_URL = config('DATABASE_URL', default='')
 
-if not DATABASE_URL:
-    raise ValueError(
-        "DATABASE_URL environment variable is required. "
-        "Please set it to your Supabase PostgreSQL connection string."
-    )
+if DATABASE_URL:
+    # Use DATABASE_URL
+    DATABASES = {
+        'default': dj_database_url.config(
+            default=DATABASE_URL,
+            conn_max_age=600,
+            ssl_require=True
+        )
+    }
+else:
+    # Use individual parameters
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': config('DB_NAME', default='postgres'),
+            'USER': config('DB_USER', default='postgres.irjrjnnbygdwbtjqrjwh'),
+            'PASSWORD': config('DB_PASSWORD'),
+            'HOST': config('DB_HOST', default='aws-0-eu-west-3.pooler.supabase.com'),
+            'PORT': config('DB_PORT', default='5432'),
+            'OPTIONS': {
+                'sslmode': 'require',
+            },
+            'CONN_MAX_AGE': 600,
+        }
+    }
 
-# Configure default database
-DATABASES = {
-    'default': dj_database_url.config(
-        default=DATABASE_URL,
-        conn_max_age=600,
-        ssl_require=True,
-        engine='django.db.backends.postgresql'
-    )
-}
-
-# Since we're using a single Supabase database, all shards point to the same DB
-# This maintains compatibility with existing sharding code
+# Shards for compatibility (all point to same Supabase DB)
 DATABASES['shard_southern_africa'] = DATABASES['default'].copy()
 DATABASES['shard_africa_other'] = DATABASES['default'].copy()
 
 print(f"\n{'='*50}")
-print(f"✅ Connected to Supabase PostgreSQL")
+print(f"✅ Connected to Supabase")
+print(f"   URL: {SUPABASE_URL}")
 print(f"   Host: {DATABASES['default']['HOST']}")
 print(f"   Database: {DATABASES['default']['NAME']}")
-print(f"   Environment: {ENVIRONMENT}")
+print(f"   Environment: {ENVIRONMENT.upper()}")
 print(f"{'='*50}\n")
 
 # ============ SHARD CONFIGURATION ============
-# Keep the shard configuration for compatibility
-# All shards now point to the same Supabase database
 SHARD_REGIONS = {
     'lesotho': 'shard_southern_africa',
     'south africa': 'shard_southern_africa',
@@ -71,11 +80,9 @@ SHARD_REGIONS = {
     'default': 'default',
 }
 
-# Database Router for Sharding
 DATABASE_ROUTERS = ['sbi_backend.database_router.ShardRouter']
 
-# ============ CELERY CONFIGURATION ============
-# Use Redis for production, memory for development
+# ============ CELERY ============
 if ENVIRONMENT == 'production':
     CELERY_BROKER_URL = config('REDIS_URL', default='redis://localhost:6379/0')
     CELERY_RESULT_BACKEND = config('REDIS_URL', default='redis://localhost:6379/0')
@@ -89,6 +96,7 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = 'Africa/Maseru'
 CELERY_TASK_TRACK_STARTED = True
 CELERY_TASK_TIME_LIMIT = 30 * 60
+
 CELERY_BEAT_SCHEDULE = {
     'update-daily-metrics': {
         'task': 'sbi_backend.celery.update_daily_metrics',
@@ -204,29 +212,19 @@ REST_FRAMEWORK = {
     },
 }
 
-# ============ PASSWORD VALIDATION ============
-AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
-        'OPTIONS': {
-            'min_length': 8,
-        }
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
-    },
-    {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
-    },
-]
-
-# Custom user model
+# ============ AUTHENTICATION ============
 AUTH_USER_MODEL = 'accounts.User'
 
-# ============ JWT SETTINGS ============
+AUTH_PASSWORD_VALIDATORS = [
+    {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
+    {
+        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'OPTIONS': {'min_length': 8}
+    },
+    {'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator'},
+    {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
+]
+
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
@@ -235,16 +233,12 @@ SIMPLE_JWT = {
     'UPDATE_LAST_LOGIN': True,
     'ALGORITHM': 'HS256',
     'SIGNING_KEY': SECRET_KEY,
-    'VERIFYING_KEY': None,
     'AUTH_HEADER_TYPES': ('Bearer',),
     'USER_ID_FIELD': 'id',
     'USER_ID_CLAIM': 'user_id',
-    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
-    'TOKEN_TYPE_CLAIM': 'token_type',
-    'JTI_CLAIM': 'jti',
 }
 
-# ============ CSRF SETTINGS ============
+# ============ SECURITY ============
 CSRF_COOKIE_SECURE = False if DEBUG else True
 CSRF_COOKIE_HTTPONLY = True
 CSRF_COOKIE_SAMESITE = 'Strict'
@@ -258,60 +252,12 @@ CACHES = {
     }
 }
 
-# ============ SESSION SETTINGS ============
+# ============ SESSION ============
 SESSION_COOKIE_SECURE = False if DEBUG else True
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = 'Strict'
 SESSION_ENGINE = 'django.contrib.sessions.backends.cache'
 SESSION_CACHE_ALIAS = 'default'
-
-# ============ DATA UPLOAD SETTINGS ============
-DATA_UPLOAD_MAX_NUMBER_FIELDS = 1000
-DATA_UPLOAD_MAX_NUMBER_FILES = 10
-DATA_UPLOAD_MAX_MEMORY_SIZE = 5242880  # 5MB
-
-# ============ OAUTH2 ============
-OAUTH2_PROVIDER = {
-    'SCOPES': {
-        'read': 'Read access',
-        'write': 'Write access',
-        'admin': 'Admin access',
-    },
-    'ACCESS_TOKEN_EXPIRE_SECONDS': 3600,
-    'REFRESH_TOKEN_EXPIRE_SECONDS': 86400 * 7,
-}
-
-# ============ STORAGE ============
-if ENVIRONMENT == 'production':
-    # Production: Use S3 or Supabase Storage
-    AWS_ACCESS_KEY_ID = config('AWS_ACCESS_KEY_ID', default='')
-    AWS_SECRET_ACCESS_KEY = config('AWS_SECRET_ACCESS_KEY', default='')
-    AWS_STORAGE_BUCKET_NAME = config('AWS_STORAGE_BUCKET_NAME', default='sbi-media')
-    AWS_S3_REGION_NAME = config('AWS_S3_REGION_NAME', default='af-south-1')
-    AWS_DEFAULT_ACL = 'private'
-    AWS_S3_OBJECT_PARAMETERS = {
-        'CacheControl': 'max-age=86400',
-    }
-    DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
-    STATICFILES_STORAGE = 'storages.backends.s3boto3.S3StaticStorage'
-else:
-    # Development: Use local storage
-    DEFAULT_FILE_STORAGE = 'django.core.files.storage.FileSystemStorage'
-    STATICFILES_STORAGE = 'django.contrib.staticfiles.storage.StaticFilesStorage'
-
-# ============ STRIPE ============
-STRIPE_PUBLISHABLE_KEY = config('STRIPE_PUBLISHABLE_KEY', default='')
-STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY', default='')
-STRIPE_WEBHOOK_SECRET = config('STRIPE_WEBHOOK_SECRET', default='')
-
-# ============ SECURITY HEADERS ============
-SECURE_BROWSER_XSS_FILTER = True
-SECURE_CONTENT_TYPE_NOSNIFF = True
-X_FRAME_OPTIONS = 'DENY'
-SECURE_HSTS_SECONDS = 0 if DEBUG else 31536000
-SECURE_HSTS_INCLUDE_SUBDOMAINS = False if DEBUG else True
-SECURE_HSTS_PRELOAD = False if DEBUG else True
-SECURE_SSL_REDIRECT = False if DEBUG else True
 
 # ============ TEMPLATES ============
 TEMPLATES = [
@@ -333,7 +279,6 @@ TEMPLATES = [
 # ============ STATIC & MEDIA ============
 STATIC_URL = '/static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
-
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
@@ -342,62 +287,26 @@ LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
     'formatters': {
-        'security': {
-            'format': '[SECURITY] {asctime} {levelname} {message}',
-            'style': '{',
-        },
         'verbose': {
-            'format': '{levelname} {asctime} {module} {process:d} {thread:d} {message}',
-            'style': '{',
-        },
-        'simple': {
-            'format': '{levelname} {message}',
+            'format': '{levelname} {asctime} {module} {message}',
             'style': '{',
         },
     },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
-            'formatter': 'verbose' if DEBUG else 'simple',
-        },
-        'security_file': {
-            'level': 'WARNING',
-            'class': 'logging.FileHandler',
-            'filename': os.path.join(BASE_DIR, 'security.log'),
-            'formatter': 'security',
+            'formatter': 'verbose',
         },
     },
     'root': {
         'handlers': ['console'],
         'level': 'DEBUG' if DEBUG else 'INFO',
     },
-    'loggers': {
-        'django': {
-            'handlers': ['console'],
-            'level': 'INFO',
-            'propagate': False,
-        },
-        'security': {
-            'handlers': ['security_file', 'console'],
-            'level': 'WARNING' if DEBUG else 'ERROR',
-            'propagate': False,
-        },
-        'django.db.backends': {
-            'handlers': ['console'],
-            'level': 'DEBUG' if DEBUG else 'ERROR',
-            'propagate': False,
-        },
-    },
 }
 
 # ============ EMAIL ============
 DEFAULT_FROM_EMAIL = config('DEFAULT_FROM_EMAIL', default='noreply@sbiapp.com')
 EMAIL_BACKEND = config('EMAIL_BACKEND', default='django.core.mail.backends.console.EmailBackend')
-EMAIL_HOST = config('EMAIL_HOST', default='smtp.gmail.com')
-EMAIL_PORT = config('EMAIL_PORT', default=587, cast=int)
-EMAIL_USE_TLS = config('EMAIL_USE_TLS', default=True, cast=bool)
-EMAIL_HOST_USER = config('EMAIL_HOST_USER', default='')
-EMAIL_HOST_PASSWORD = config('EMAIL_HOST_PASSWORD', default='')
 
 # ============ INTERNATIONALIZATION ============
 LANGUAGE_CODE = 'en-us'
@@ -407,14 +316,27 @@ USE_TZ = True
 
 # ============ WSGI ============
 WSGI_APPLICATION = 'sbi_backend.wsgi.application'
-
-# ============ DEFAULT PRIMARY KEY ============
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
-# ============ SUPABASE CONFIGURATION ============
-SUPABASE_URL = config('SUPABASE_URL', default='')
-SUPABASE_KEY = config('SUPABASE_KEY', default='')
-SUPABASE_SERVICE_KEY = config('SUPABASE_SERVICE_KEY', default='')
+# ============ OAUTH2 ============
+OAUTH2_PROVIDER = {
+    'SCOPES': {
+        'read': 'Read access',
+        'write': 'Write access',
+        'admin': 'Admin access',
+    },
+    'ACCESS_TOKEN_EXPIRE_SECONDS': 3600,
+    'REFRESH_TOKEN_EXPIRE_SECONDS': 86400 * 7,
+}
+
+# ============ STRIPE CONFIGURATION ============
+STRIPE_PUBLISHABLE_KEY = config('STRIPE_PUBLISHABLE_KEY', default='')
+STRIPE_SECRET_KEY = config('STRIPE_SECRET_KEY', default='')
+STRIPE_WEBHOOK_SECRET = config('STRIPE_WEBHOOK_SECRET', default='')
+
+# If you want to make it optional for development
+if not STRIPE_SECRET_KEY:
+    print("⚠️  WARNING: STRIPE_SECRET_KEY not set. Stripe features will not work.")
 
 # Debug - print ALLOWED_HOSTS
 print(f"🔍 ALLOWED_HOSTS = {ALLOWED_HOSTS}")
