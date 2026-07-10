@@ -17,10 +17,10 @@ class SMEProfileUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = SMEProfile
         fields = [
-            'business_name', 'registration_number', 'industry', 'sub_industry',
-            'location', 'city', 'country', 'region', 'description', 'founded_year',
-            'employee_count', 'funding_needed', 'funding_purpose', 'annual_revenue',
-            'profit_margin'
+            'business_name', 'registration_number', 'industry',
+            'location', 'country', 'lesotho_district', 'sa_province', 'sa_city',
+            'description', 'founded_year', 'employee_count', 'funding_needed',
+            'funding_purpose', 'annual_revenue', 'profit_margin'
         ]
     
     def validate_funding_needed(self, value):

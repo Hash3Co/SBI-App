@@ -10,10 +10,10 @@ class SMEProfileAdmin(admin.ModelAdmin):
     
     fieldsets = (
         ('Business Information', {
-            'fields': ('user', 'business_name', 'registration_number', 'industry', 'sub_industry')
+            'fields': ('user', 'business_name', 'registration_number', 'industry')
         }),
         ('Location', {
-            'fields': ('location', 'city', 'country', 'region')
+            'fields': ('location', 'country', 'lesotho_district', 'sa_province', 'sa_city')
         }),
         ('Business Details', {
             'fields': ('description', 'founded_year', 'employee_count')
@@ -22,7 +22,7 @@ class SMEProfileAdmin(admin.ModelAdmin):
             'fields': ('funding_needed', 'funding_purpose', 'annual_revenue', 'profit_margin')
         }),
         ('Readiness', {
-            'fields': ('readiness_score', 'readiness_details')
+            'fields': ('readiness_score',)
         }),
         ('Verification', {
             'fields': ('verification_status', 'verified_at')
@@ -49,8 +49,8 @@ class SMEProfileAdmin(admin.ModelAdmin):
         from .services import calculate_readiness_score
         for sme in queryset:
             score_data = calculate_readiness_score(sme)
-            sme.readiness_score = score_data['overall_score']
-            sme.readiness_details = score_data
+            sme.readiness_score = score_data.get('overall_score', 0)
+            # If detailed breakdown is required, consider storing it in a related model or JSONField on SMEProfile.
             sme.save()
         self.message_user(request, f'{queryset.count()} readiness scores recalculated.')
     recalculate_readiness.short_description = "Recalculate readiness scores"
