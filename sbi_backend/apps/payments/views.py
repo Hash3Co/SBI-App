@@ -18,11 +18,11 @@ from apps.accounts.permissions import IsSME, IsInvestor
 # Initialize Stripe with better error handling
 try:
     stripe.api_key = settings.STRIPE_SECRET_KEY
-    print("✅ Stripe initialized successfully")
+    print("Stripe initialized successfully")
 except AttributeError:
     # Set a dummy key if STRIPE_SECRET_KEY is not set
     stripe.api_key = "sk_test_dummy_key_1234567890"
-    print("⚠️  Stripe running in dummy mode - no real payments will process")
+    print("Stripe running in dummy mode - no real payments will process")
 
 
 class SubscriptionPlanListView(generics.ListAPIView):

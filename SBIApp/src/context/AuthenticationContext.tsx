@@ -207,6 +207,7 @@ export const AuthenticationProvider: React.FC<{ children: React.ReactNode }> = (
       const payload: any = {
         email: userData.email,
         password: userData.password,
+        password2: userData.password,
         full_name: userData.fullName,
         role: userData.role,
       };

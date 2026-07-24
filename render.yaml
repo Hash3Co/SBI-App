@@ -1,0 +1,108 @@
+# render.yaml
+services:
+  # Web Service
+  - type: web
+    name: sbi-backend
+    runtime: python
+    plan: starter
+    region: frankfurt  # or ohio, oregon, singapore
+    buildCommand: |
+      pip install -r requirements.txt
+      python manage.py collectstatic --noinput
+    startCommand: |
+      gunicorn --bind 0.0.0.0:$PORT --workers 4 --threads 2 --worker-class=gthread --timeout 120 sbi_backend.wsgi:application
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: sbi_backend.settings
+      - key: PYTHONUNBUFFERED
+        value: 1
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: SUPABASE_PUBLISHABLE_KEY
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_PUBLISHABLE_KEY
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          name: sbi-redis
+          type: redis
+          property: connectionString
+
+  # Redis Service
+  - type: redis
+    name: sbi-redis
+    plan: starter
+    region: frankfurt
+    maxmemoryPolicy: allkeys-lru
+
+  # Celery Worker
+  - type: worker
+    name: sbi-celery-worker
+    runtime: python
+    plan: starter
+    region: frankfurt
+    buildCommand: |
+      pip install -r requirements.txt
+    startCommand: |
+      celery -A sbi_backend worker --loglevel=info --concurrency=4 --max-tasks-per-child=1000
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: sbi_backend.settings
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          name: sbi-redis
+          type: redis
+          property: connectionString
+
+  # Celery Beat
+  - type: worker
+    name: sbi-celery-beat
+    runtime: python
+    plan: starter
+    region: frankfurt
+    buildCommand: |
+      pip install -r requirements.txt
+    startCommand: |
+      celery -A sbi_backend beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
+    envVars:
+      - key: DJANGO_SETTINGS_MODULE
+        value: sbi_backend.settings
+      - key: ENVIRONMENT
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: REDIS_URL
+        fromService:
+          name: sbi-redis
+          type: redis
+          property: connectionString

@@ -8,7 +8,7 @@ const isDevelopment = __DEV__;
 // For physical device, use your computer's local IP
 const getLocalIP = () => {
   // Use your computer's local IP address
-  return '192.168.43.224'; // Your machine IP
+  return '10.0.0.3'; // Your machine IP
 };
 
 export const API_CONFIG = {

@@ -20,7 +20,7 @@ DEBUG = config('DEBUG', default=True, cast=bool)
 
 ALLOWED_HOSTS = config(
     'ALLOWED_HOSTS',
-    default='127.0.0.1,localhost,*.onrender.com,192.168.56.1,192.168.43.224'
+    default='10.0.0.3,127.0.0.1,localhost,*.onrender.com,192.168.56.1,192.168.43.224'
 ).split(',')
 
 # ============ SUPABASE CONFIGURATION ============
@@ -64,7 +64,7 @@ DATABASES['shard_southern_africa'] = DATABASES['default'].copy()
 DATABASES['shard_africa_other'] = DATABASES['default'].copy()
 
 print(f"\n{'='*50}")
-print(f"✅ Connected to Supabase")
+print("Connected to Supabase")
 print(f"   URL: {SUPABASE_URL}")
 print(f"   Host: {DATABASES['default']['HOST']}")
 print(f"   Database: {DATABASES['default']['NAME']}")
@@ -214,6 +214,10 @@ REST_FRAMEWORK = {
 
 # ============ AUTHENTICATION ============
 AUTH_USER_MODEL = 'accounts.User'
+AUTHENTICATION_BACKENDS = [
+    'django.contrib.auth.backends.ModelBackend',
+    'apps.accounts.backends.SupabaseAuthBackend',
+]
 
 AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator'},
@@ -336,7 +340,7 @@ STRIPE_WEBHOOK_SECRET = config('STRIPE_WEBHOOK_SECRET', default='')
 
 # If you want to make it optional for development
 if not STRIPE_SECRET_KEY:
-    print("⚠️  WARNING: STRIPE_SECRET_KEY not set. Stripe features will not work.")
+    print("WARNING: STRIPE_SECRET_KEY not set. Stripe features will not work.")
 
 # Debug - print ALLOWED_HOSTS
-print(f"🔍 ALLOWED_HOSTS = {ALLOWED_HOSTS}")
+print(f"ALLOWED_HOSTS = {ALLOWED_HOSTS}")

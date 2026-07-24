@@ -6,10 +6,37 @@ import { COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS } from '../../constants/them
 interface SecureInputProps extends TextInputProps {
   label: string;
   secureTextEntry?: boolean;
+  validationType?: 'email' | 'password';
+  onValidChange?: (isValid: boolean, value: string) => void;
 }
 
-export const SecureInput: React.FC<SecureInputProps> = ({ label, secureTextEntry, ...props }) => {
+const validateEmail = (email: string): boolean => {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email);
+};
+
+const validatePassword = (password: string): boolean => {
+  return password.length >= 8;
+};
+
+export const SecureInput: React.FC<SecureInputProps> = ({ label, secureTextEntry, validationType, onValidChange, ...props }) => {
   const [showPassword, setShowPassword] = useState(false);
+
+  const handleTextChange = (text: string) => {
+    if (props.onChangeText) {
+      props.onChangeText(text);
+    }
+    
+    if (validationType && onValidChange) {
+      let isValid = false;
+      if (validationType === 'email') {
+        isValid = validateEmail(text);
+      } else if (validationType === 'password') {
+        isValid = validatePassword(text);
+      }
+      onValidChange(isValid, text);
+    }
+  };
 
   return (
     <View style={styles.container}>
@@ -17,6 +44,7 @@ export const SecureInput: React.FC<SecureInputProps> = ({ label, secureTextEntry
       <View style={styles.inputContainer}>
         <TextInput
           {...props}
+          onChangeText={handleTextChange}
           style={styles.input}
           secureTextEntry={secureTextEntry && !showPassword}
           placeholderTextColor={COLORS.gray400}
