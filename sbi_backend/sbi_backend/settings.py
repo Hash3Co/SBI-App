@@ -16,7 +16,7 @@ ROOT_URLCONF = 'sbi_backend.urls'
 # ============ ENVIRONMENT ============
 ENVIRONMENT = config('ENVIRONMENT', default='development')
 SECRET_KEY = config('SECRET_KEY')
-DEBUG = config('DEBUG', default=True, cast=bool)
+DEBUG = os.getenv("DEBUG", "False") == "True"
 
 ALLOWED_HOSTS = config(
     'ALLOWED_HOSTS',
