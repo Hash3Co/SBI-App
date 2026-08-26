@@ -9,6 +9,7 @@ from django.db import connection
 from django.core.cache import cache
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
+from django.core.mail import send_mail
 from .models import User, UserActivity
 from .serializers import (
     UserSerializer, RegisterSerializer, LoginSerializer,
