@@ -7,6 +7,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.db import connection
 from django.core.cache import cache
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from .models import User, UserActivity
 from .serializers import (
     UserSerializer, RegisterSerializer, LoginSerializer,
@@ -15,6 +17,7 @@ from .serializers import (
     UserActivitySerializer
 )
 import logging
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -22,54 +25,61 @@ logger = logging.getLogger(__name__)
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def health_check(request):
-    db_healthy = False
-    cache_healthy = False
-    
     try:
-        with connection.cursor() as cursor:
-            cursor.execute("SELECT 1")
-            db_healthy = True
-    except Exception:
         db_healthy = False
-    
-    try:
-        cache.set('health_check', 'ok', 10)
-        cache_healthy = cache.get('health_check') == 'ok'
-    except Exception:
         cache_healthy = False
-    
-    return Response({
-        'status': 'healthy' if db_healthy and cache_healthy else 'unhealthy',
-        'message': 'NEXUS4IR Backend API',
-        'version': 'v1',
-        'database': 'connected' if db_healthy else 'disconnected',
-        'cache': 'connected' if cache_healthy else 'disconnected',
-        'environment': 'production',
-        'endpoints': {
-            'docs': '/api/docs/',
-            'redoc': '/api/redoc/',
-            'health': '/api/health/',
-            'auth': '/api/auth/',
-            'sme': '/api/sme/',
-            'investor': '/api/investor/',
-            'matching': '/api/matching/',
-            'training': '/api/training/',
-            'payment': '/api/payment/',
-            'marketplace': '/api/marketplace/',
-        }
-    })
+        
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT 1")
+                db_healthy = True
+        except Exception as e:
+            logger.error(f"Database error: {e}")
+        
+        try:
+            cache.set('health_check', 'ok', 10)
+            cache_healthy = cache.get('health_check') == 'ok'
+        except Exception as e:
+            logger.error(f"Cache error: {e}")
+        
+        return Response({
+            'status': 'healthy' if db_healthy and cache_healthy else 'unhealthy',
+            'message': 'NEXUS4IR Backend API',
+            'version': 'v1',
+            'database': 'connected' if db_healthy else 'disconnected',
+            'cache': 'connected' if cache_healthy else 'disconnected',
+            'environment': 'production',
+            'endpoints': {
+                'docs': '/api/docs/',
+                'redoc': '/api/redoc/',
+                'health': '/api/health/',
+                'auth': '/api/auth/',
+                'sme': '/api/sme/',
+                'investor': '/api/investor/',
+                'matching': '/api/matching/',
+                'training': '/api/training/',
+                'payment': '/api/payment/',
+                'marketplace': '/api/marketplace/',
+            }
+        })
+    except Exception as e:
+        logger.error(f"Health check error: {e}")
+        return Response({'status': 'error', 'message': str(e)}, status=500)
 
 # ============ REGISTER VIEW ============
 class RegisterView(generics.CreateAPIView):
-    """User registration endpoint"""
     serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
     
     def create(self, request, *args, **kwargs):
         try:
-            logger.info(f"📝 Registration attempt for: {request.data.get('email')}")
+            logger.info(f"📝 Registration attempt: {request.data.get('email')}")
+            
+            # Log request data for debugging
+            logger.debug(f"Request data: {request.data}")
             
             serializer = self.get_serializer(data=request.data)
+            
             if not serializer.is_valid():
                 logger.error(f"❌ Validation errors: {serializer.errors}")
                 return Response({
@@ -77,45 +87,47 @@ class RegisterView(generics.CreateAPIView):
                     'message': 'Validation failed'
                 }, status=status.HTTP_400_BAD_REQUEST)
             
+            # Create user
             user = serializer.save()
+            logger.info(f"✅ User created: {user.email}")
             
-            # Create profile based on role
-            if user.role == 'sme':
-                try:
+            # Try to create profile based on role
+            try:
+                if user.role == 'sme':
                     from apps.sme.models import SMEProfile
-                    SMEProfile.objects.create(
+                    SMEProfile.objects.get_or_create(
                         user=user,
-                        business_name=f"{user.full_name}'s Business",
-                        industry='Technology',
-                        location=''
+                        defaults={
+                            'business_name': f"{user.full_name}'s Business",
+                            'industry': 'Technology',
+                            'location': ''
+                        }
                     )
-                except Exception as e:
-                    logger.warning(f"Could not create SME profile: {e}")
-            
-            elif user.role == 'investor':
-                try:
+                    logger.info(f"✅ SME profile created for {user.email}")
+                elif user.role == 'investor':
                     from apps.investor.models import InvestorProfile
-                    InvestorProfile.objects.create(
+                    InvestorProfile.objects.get_or_create(
                         user=user,
-                        full_name=user.full_name,
-                        company_name='',
-                        location=''
+                        defaults={
+                            'full_name': user.full_name,
+                            'company_name': '',
+                            'location': ''
+                        }
                     )
-                except Exception as e:
-                    logger.warning(f"Could not create Investor profile: {e}")
+                    logger.info(f"✅ Investor profile created for {user.email}")
+            except Exception as e:
+                logger.warning(f"⚠️ Profile creation warning: {e}")
             
             # Log activity
             try:
                 UserActivity.objects.create(
                     user=user,
                     action='register',
-                    ip_address=request.META.get('REMOTE_ADDR'),
-                    user_agent=request.META.get('HTTP_USER_AGENT')
+                    ip_address=request.META.get('REMOTE_ADDR', ''),
+                    user_agent=request.META.get('HTTP_USER_AGENT', '')
                 )
             except Exception as e:
-                logger.warning(f"Could not log activity: {e}")
-            
-            logger.info(f"✅ User registered successfully: {user.email}")
+                logger.warning(f"⚠️ Activity log warning: {e}")
             
             # Generate JWT tokens
             refresh = RefreshToken.for_user(user)
@@ -129,6 +141,8 @@ class RegisterView(generics.CreateAPIView):
             
         except Exception as e:
             logger.error(f"❌ Registration error: {str(e)}")
+            import traceback
+            logger.error(traceback.format_exc())
             return Response({
                 'error': str(e),
                 'message': 'Registration failed'
@@ -136,12 +150,11 @@ class RegisterView(generics.CreateAPIView):
 
 # ============ LOGIN VIEW ============
 class LoginView(APIView):
-    """User login endpoint"""
     permission_classes = [permissions.AllowAny]
     
     def post(self, request):
         try:
-            logger.info(f"🔐 Login attempt for: {request.data.get('email')}")
+            logger.info(f"🔐 Login attempt: {request.data.get('email')}")
             
             serializer = LoginSerializer(data=request.data)
             if not serializer.is_valid():
@@ -153,11 +166,10 @@ class LoginView(APIView):
             email = serializer.validated_data['email']
             password = serializer.validated_data['password']
             
-            # Authenticate
             user = authenticate(email=email, password=password)
             
             if not user:
-                logger.warning(f"❌ Invalid credentials for: {email}")
+                logger.warning(f"❌ Invalid credentials: {email}")
                 return Response({
                     'error': 'Invalid credentials',
                     'message': 'Email or password is incorrect'
@@ -169,19 +181,17 @@ class LoginView(APIView):
                     'message': 'This account has been deactivated'
                 }, status=status.HTTP_403_FORBIDDEN)
             
-            # Generate tokens
             refresh = RefreshToken.for_user(user)
             
-            # Log activity
             try:
                 UserActivity.objects.create(
                     user=user,
                     action='login',
-                    ip_address=request.META.get('REMOTE_ADDR'),
-                    user_agent=request.META.get('HTTP_USER_AGENT')
+                    ip_address=request.META.get('REMOTE_ADDR', ''),
+                    user_agent=request.META.get('HTTP_USER_AGENT', '')
                 )
             except Exception as e:
-                logger.warning(f"Could not log activity: {e}")
+                logger.warning(f"Activity log warning: {e}")
             
             logger.info(f"✅ User logged in: {email}")
             
@@ -200,7 +210,6 @@ class LoginView(APIView):
 
 # ============ LOGOUT VIEW ============
 class LogoutView(APIView):
-    """User logout endpoint"""
     permission_classes = [permissions.IsAuthenticated]
     
     def post(self, request):
@@ -213,16 +222,15 @@ class LogoutView(APIView):
                 except Exception as e:
                     logger.error(f"Token blacklist error: {e}")
             
-            # Log activity
             try:
                 UserActivity.objects.create(
                     user=request.user,
                     action='logout',
-                    ip_address=request.META.get('REMOTE_ADDR'),
-                    user_agent=request.META.get('HTTP_USER_AGENT')
+                    ip_address=request.META.get('REMOTE_ADDR', ''),
+                    user_agent=request.META.get('HTTP_USER_AGENT', '')
                 )
             except Exception as e:
-                logger.warning(f"Could not log activity: {e}")
+                logger.warning(f"Activity log warning: {e}")
             
             return Response({'message': 'Logout successful'})
             
@@ -232,7 +240,6 @@ class LogoutView(APIView):
 
 # ============ PROFILE VIEW ============
 class ProfileView(generics.RetrieveAPIView):
-    """Get current user profile"""
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
     
@@ -241,7 +248,6 @@ class ProfileView(generics.RetrieveAPIView):
 
 # ============ UPDATE PROFILE VIEW ============
 class UpdateProfileView(generics.UpdateAPIView):
-    """Update user profile"""
     serializer_class = UpdateProfileSerializer
     permission_classes = [permissions.IsAuthenticated]
     
@@ -250,7 +256,6 @@ class UpdateProfileView(generics.UpdateAPIView):
 
 # ============ CHANGE PASSWORD VIEW ============
 class ChangePasswordView(APIView):
-    """Change user password"""
     permission_classes = [permissions.IsAuthenticated]
     
     def post(self, request):
@@ -271,17 +276,16 @@ class ChangePasswordView(APIView):
             UserActivity.objects.create(
                 user=user,
                 action='change_password',
-                ip_address=request.META.get('REMOTE_ADDR'),
-                user_agent=request.META.get('HTTP_USER_AGENT')
+                ip_address=request.META.get('REMOTE_ADDR', ''),
+                user_agent=request.META.get('HTTP_USER_AGENT', '')
             )
         except Exception as e:
-            logger.warning(f"Could not log activity: {e}")
+            logger.warning(f"Activity log warning: {e}")
         
         return Response({'message': 'Password updated successfully'})
 
 # ============ FORGOT PASSWORD VIEW ============
 class ForgotPasswordView(APIView):
-    """Request password reset"""
     permission_classes = [permissions.AllowAny]
     
     def post(self, request):
@@ -313,7 +317,6 @@ class ForgotPasswordView(APIView):
 
 # ============ RESET PASSWORD VIEW ============
 class ResetPasswordView(APIView):
-    """Reset password with token"""
     permission_classes = [permissions.AllowAny]
     
     def post(self, request):
@@ -337,7 +340,6 @@ class ResetPasswordView(APIView):
 
 # ============ VERIFY TOKEN VIEW ============
 class VerifyTokenView(APIView):
-    """Verify JWT token"""
     permission_classes = [permissions.AllowAny]
     
     def get(self, request):
@@ -354,7 +356,6 @@ class VerifyTokenView(APIView):
 
 # ============ USER ACTIVITY VIEW ============
 class UserActivityView(generics.ListAPIView):
-    """Get user activity logs"""
     serializer_class = UserActivitySerializer
     permission_classes = [permissions.IsAuthenticated]
     
