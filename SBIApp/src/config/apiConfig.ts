@@ -8,7 +8,7 @@ import { APP_CONFIG } from './appConfig';
 const RENDER_BACKEND_URL = 'https://sbi-app.onrender.com';
 // ============================================================
 
-// For local development only
+// For local development
 const getLocalIP = () => {
   if (Platform.OS === 'android') return '10.0.2.2';
   if (Platform.OS === 'ios') return '127.0.0.1';
@@ -16,12 +16,12 @@ const getLocalIP = () => {
 };
 
 // Set to true for production, false for local development
-const USE_RENDER = true; // ← Make sure this is TRUE
+const USE_RENDER = true;
 
 export const API_CONFIG = {
   baseURL: USE_RENDER 
-    ? `${RENDER_BACKEND_URL}/api/v1`  // Production on Render
-    : `http://${getLocalIP()}:8000/api/v1`, // Local development
+    ? `${RENDER_BACKEND_URL}/api`
+    : `http://${getLocalIP()}:8000/api`,
   
   timeout: 30000,
   retryCount: 3,
@@ -38,4 +38,3 @@ export const API_CONFIG = {
 
 console.log(`🔗 API Base URL: ${API_CONFIG.baseURL}`);
 console.log(`🌐 Using Render: ${USE_RENDER}`);
-console.log(`📱 Platform: ${Platform.OS}`);

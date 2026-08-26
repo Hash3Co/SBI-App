@@ -6,7 +6,7 @@ export const API_ENDPOINTS = {
     register: `${API_CONFIG.baseURL}/auth/register/`,
     login: `${API_CONFIG.baseURL}/auth/login/`,
     logout: `${API_CONFIG.baseURL}/auth/logout/`,
-    refresh: `${API_CONFIG.baseURL}/auth/token/refresh/`,
+    refresh: `${API_CONFIG.baseURL}/auth/refresh/`,
     forgotPassword: `${API_CONFIG.baseURL}/auth/forgot-password/`,
     resetPassword: `${API_CONFIG.baseURL}/auth/reset-password/`,
     verifyEmail: `${API_CONFIG.baseURL}/auth/verify-email/`,

@@ -19,7 +19,7 @@ class ApiClient {
       timeout: API_CONFIG.timeout,
       headers: {
         ...API_CONFIG.headers,
-        'Accept-Language': 'en',
+        'X-Request-ID': this.generateRequestId(),
       },
     });
     this.setupInterceptors();
@@ -34,11 +34,10 @@ class ApiClient {
   }
 
   private setupLogging(): void {
-    // Log all requests in development
     if (__DEV__) {
       this.client.interceptors.request.use(
         (config) => {
-          console.log(`🌐 API Request: ${config.method?.toUpperCase()} ${config.url}`);
+          console.log(`🌐 [${config.method?.toUpperCase()}] ${config.url}`);
           return config;
         },
         (error) => {
@@ -49,17 +48,17 @@ class ApiClient {
 
       this.client.interceptors.response.use(
         (response) => {
-          console.log(`✅ API Response: ${response.status} ${response.config.url}`);
+          console.log(`✅ [${response.status}] ${response.config.url}`);
           return response;
         },
         (error) => {
           if (error.response) {
-            console.error(`❌ API Error: ${error.response.status} ${error.config?.url}`);
-            console.error('Response data:', error.response.data);
+            console.error(`❌ [${error.response.status}] ${error.config?.url}`);
+            console.error('Response:', error.response.data);
           } else if (error.request) {
-            console.error('❌ No response from server:', error.request);
+            console.error('❌ No response:', error.request);
           } else {
-            console.error('❌ Request error:', error.message);
+            console.error('❌ Error:', error.message);
           }
           return Promise.reject(error);
         }
@@ -75,32 +74,20 @@ class ApiClient {
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
-        // Add device info
-        config.headers['X-Device-ID'] = Platform.OS;
         config.headers['X-Request-ID'] = this.generateRequestId();
         return config;
       },
-      (error) => {
-        console.error('Request interceptor error:', error);
-        return Promise.reject(error);
-      }
+      (error) => Promise.reject(error)
     );
 
     // Response interceptor - Handle token refresh
     this.client.interceptors.response.use(
-      (response) => {
-        // Log successful responses
-        if (__DEV__) {
-          console.log(`✅ ${response.status} ${response.config.url}`);
-        }
-        return response;
-      },
+      (response) => response,
       async (error) => {
         const originalRequest = error.config;
         
-        // Network error - no response from server
+        // Network error
         if (!error.response) {
-          console.error('🌐 Network Error - No response from server');
           return Promise.reject({
             message: 'Network error. Please check your connection.',
             code: 'NETWORK_ERROR',
@@ -108,13 +95,9 @@ class ApiClient {
           });
         }
 
-        // Log error response
-        console.error(`❌ Error ${error.response.status}: ${error.response.config?.url}`);
-        console.error('Response data:', error.response.data);
-
         // Handle 401 - Token expired
         if (error.response?.status === 401 && !originalRequest._retry) {
-          // Don't attempt refresh for login/register endpoints
+          // Don't attempt refresh for login/register
           if (originalRequest.url?.includes('/auth/login') || 
               originalRequest.url?.includes('/auth/register')) {
             return Promise.reject(error.response.data);
@@ -134,7 +117,6 @@ class ApiClient {
           try {
             const refreshToken = await secureStorage.getRefreshToken();
             if (!refreshToken) {
-              console.error('No refresh token available');
               await secureStorage.clearAll();
               return Promise.reject({
                 message: 'Session expired. Please login again.',
@@ -142,18 +124,15 @@ class ApiClient {
               });
             }
 
-            console.log('🔄 Refreshing token...');
             const response = await this.client.post('/auth/refresh/', {
               refresh: refreshToken,
             });
 
             const newAccessToken = response.data.access || response.data.token;
             if (newAccessToken) {
-              console.log('✅ Token refreshed successfully');
               await secureStorage.setToken(newAccessToken);
               originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
               
-              // Process queued requests
               this.failedQueue.forEach((promise) => promise.resolve());
               this.failedQueue = [];
               
@@ -161,7 +140,6 @@ class ApiClient {
             }
             throw new Error('No token in refresh response');
           } catch (refreshError) {
-            console.error('❌ Token refresh failed:', refreshError);
             await secureStorage.clearAll();
             this.failedQueue.forEach((promise) => promise.reject(refreshError));
             this.failedQueue = [];
