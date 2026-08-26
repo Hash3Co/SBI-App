@@ -109,7 +109,6 @@ MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
 ]
 
-RATELIMIT_VIEW = 'django_ratelimit.decorators.ratelimit'
 
 # ============ INSTALLED APPS ============
 INSTALLED_APPS = [
