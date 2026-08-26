@@ -16,6 +16,7 @@ sleep 2
 
 # Run migrations
 echo "📦 Running migrations..."
+python manage.py makemigrations --noinput
 python manage.py migrate --noinput
 
 # Collect static files
