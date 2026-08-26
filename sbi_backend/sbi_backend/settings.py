@@ -477,15 +477,6 @@ CSP_IMG_SRC = ("'self'", "data:", "https:")
 CSP_FONT_SRC = ("'self'", "https:", "data:")
 CSP_CONNECT_SRC = ("'self'", "https://*.onrender.com")
 
-# ============ SILK PROFILING (Development Only) ============
-if DEBUG:
-    INSTALLED_APPS.append('silk')
-    MIDDLEWARE.insert(0, 'silk.middleware.SilkyMiddleware')
-    SILKY_PYTHON_PROFILER = True
-    SILKY_PYTHON_PROFILER_BINARY = True
-    SILKY_MAX_REQUEST_BODY_SIZE = 1024
-    SILKY_MAX_RESPONSE_BODY_SIZE = 1024
-    SILKY_META = True
 
 print(f"\n{'='*60}")
 print(f"Environment: {ENVIRONMENT.upper()}")
