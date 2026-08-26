@@ -324,10 +324,7 @@ AUTHENTICATION_BACKENDS = [
 
 # ============ PASSWORD VALIDATION - STRONG ============
 AUTH_PASSWORD_VALIDATORS = [
-    {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
-        'OPTIONS': {'max_similarity': 0.7}
-    },
+    
     {
         'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
         'OPTIONS': {'min_length': 7}
@@ -338,15 +335,7 @@ AUTH_PASSWORD_VALIDATORS = [
     {
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
-    {
-        'NAME': 'apps.accounts.validators.SpecialCharacterValidator',
-    },
-    {
-        'NAME': 'apps.accounts.validators.NoSequentialValidator',
-    },
-    {
-        'NAME': 'apps.accounts.validators.NoRepeatingValidator',
-    },
+    
 ]
 
 # ============ BLEACH - HTML SANITIZATION ============
