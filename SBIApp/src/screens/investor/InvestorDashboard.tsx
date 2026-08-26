@@ -1,6 +1,14 @@
 // src/screens/investor/InvestorDashboard.tsx
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Animated } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  RefreshControl,
+  Animated,
+} from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useAuth } from '../../context/AuthenticationContext';
@@ -44,25 +52,27 @@ export const InvestorDashboard = ({ navigation }: any) => {
         investorService.getImpactMetrics(),
         fetchSuggestions(),
       ]);
-      
+
       setPortfolioStats({
-        totalInvested: portfolio.totalInvested || 0,
-        activeDeals: portfolio.activeDeals || 0,
-        avgROI: portfolio.avgROI || 0,
-        impactScore: portfolio.impactScore || 0,
+        totalInvested: portfolio?.totalInvested || 0,
+        activeDeals: portfolio?.activeDeals || 0,
+        avgROI: portfolio?.avgROI || 0,
+        impactScore: portfolio?.impactScore || 0,
       });
 
-      if (metrics && metrics.length > 0) {
-        setImpactMetrics(metrics.map(m => ({
-          title: m.title,
-          value: m.value,
-          change: `+${m.change}%`,
-          icon: m.icon,
+      // Handle metrics - check if it's an array and has data
+      if (metrics && Array.isArray(metrics) && metrics.length > 0) {
+        setImpactMetrics(metrics.map((m: any) => ({
+          title: m.title || 'Unknown',
+          value: m.value || '0',
+          change: `+${m.change || 0}%`,
+          icon: m.icon || 'circle',
           color: m.color || '#1B2A4A',
         })));
       }
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
+      // Use default values on error
     }
   };
 
@@ -73,16 +83,16 @@ export const InvestorDashboard = ({ navigation }: any) => {
   };
 
   return (
-    <ScrollView 
-      style={styles.container} 
+    <ScrollView
+      style={styles.container}
       refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       showsVerticalScrollIndicator={false}
     >
-      <LinearGradient 
-        colors={['#1B2A4A', '#2A3F6A', '#3A558A']} 
+      <LinearGradient
+        colors={['#1B2A4A', '#2A3F6A', '#3A558A']}
         style={styles.header}
-        start={{x: 0, y: 0}}
-        end={{x: 1, y: 0}}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
       >
         <View style={styles.headerContent}>
           <View>
@@ -107,8 +117,8 @@ export const InvestorDashboard = ({ navigation }: any) => {
 
       <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
         <View style={styles.metricsGrid}>
-          {impactMetrics.map((metric) => (
-            <View key={metric.title} style={styles.metricCard}>
+          {impactMetrics.map((metric, index) => (
+            <View key={index} style={styles.metricCard}>
               <LinearGradient
                 colors={[metric.color + '15', metric.color + '05']}
                 style={styles.metricGradient}
@@ -137,16 +147,16 @@ export const InvestorDashboard = ({ navigation }: any) => {
               <Text style={styles.viewAll}>View All</Text>
             </TouchableOpacity>
           </View>
-          {suggestions.length === 0 ? (
+          {!suggestions || suggestions.length === 0 ? (
             <View style={styles.emptyState}>
               <Icon name="people" size={48} color="#DEE2E6" />
               <Text style={styles.emptyStateText}>No suggestions yet</Text>
               <Text style={styles.emptyStateSubtext}>We'll find matches for you soon</Text>
             </View>
           ) : (
-            suggestions.slice(0, 3).map((item) => (
-              <TouchableOpacity 
-                key={item.id} 
+            suggestions.slice(0, 3).map((item: any) => (
+              <TouchableOpacity
+                key={item.id}
                 style={styles.matchItem}
                 onPress={() => navigation.navigate('Matching')}
               >
@@ -200,38 +210,39 @@ export const InvestorDashboard = ({ navigation }: any) => {
   );
 };
 
+// Keep your existing styles...
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F7FA' },
-  header: { 
+  header: {
     paddingHorizontal: SPACING.xl,
     paddingTop: SPACING.xxxl,
     paddingBottom: SPACING.xxl,
     borderBottomLeftRadius: BORDER_RADIUS.xxl,
     borderBottomRightRadius: BORDER_RADIUS.xxl,
   },
-  headerContent: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
+  headerContent: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
   },
-  welcomeText: { 
-    fontSize: TYPOGRAPHY.sizes.md, 
+  welcomeText: {
+    fontSize: TYPOGRAPHY.sizes.md,
     color: 'rgba(255,255,255,0.8)',
   },
-  userName: { 
-    fontSize: TYPOGRAPHY.sizes.xxl, 
-    fontWeight: 'bold', 
+  userName: {
+    fontSize: TYPOGRAPHY.sizes.xxl,
+    fontWeight: 'bold',
     color: COLORS.white,
     marginTop: 2,
   },
-  headerActions: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: SPACING.md 
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.md,
   },
-  iconButton: { 
-    padding: SPACING.xs, 
-    position: 'relative' 
+  iconButton: {
+    padding: SPACING.xs,
+    position: 'relative',
   },
   notificationBadge: {
     position: 'absolute',
@@ -244,89 +255,89 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  notificationCount: { 
-    fontSize: 10, 
-    color: COLORS.white, 
-    fontWeight: 'bold' 
+  notificationCount: {
+    fontSize: 10,
+    color: COLORS.white,
+    fontWeight: 'bold',
   },
   content: { padding: SPACING.lg, paddingBottom: SPACING.xxxl },
-  metricsGrid: { 
-    flexDirection: 'row', 
-    flexWrap: 'wrap', 
+  metricsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: SPACING.md,
     marginBottom: SPACING.lg,
   },
-  metricCard: { 
-    flex: 1, 
+  metricCard: {
+    flex: 1,
     minWidth: '45%',
     borderRadius: BORDER_RADIUS.lg,
     overflow: 'hidden',
     ...SHADOWS.sm,
   },
-  metricGradient: { 
-    padding: SPACING.md, 
+  metricGradient: {
+    padding: SPACING.md,
     alignItems: 'center',
     borderRadius: BORDER_RADIUS.lg,
   },
-  metricIcon: { 
-    width: 40, 
-    height: 40, 
-    borderRadius: 20, 
-    justifyContent: 'center', 
-    alignItems: 'center', 
-    marginBottom: SPACING.sm 
+  metricIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: SPACING.sm,
   },
-  metricValue: { 
-    fontSize: TYPOGRAPHY.sizes.xl, 
-    fontWeight: 'bold', 
-    color: '#1B2A4A' 
+  metricValue: {
+    fontSize: TYPOGRAPHY.sizes.xl,
+    fontWeight: 'bold',
+    color: '#1B2A4A',
   },
-  metricTitle: { 
-    fontSize: TYPOGRAPHY.sizes.xs, 
-    color: '#64748b', 
+  metricTitle: {
+    fontSize: TYPOGRAPHY.sizes.xs,
+    color: '#64748b',
     marginTop: 2,
     textAlign: 'center',
   },
-  metricChange: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
+  metricChange: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: SPACING.sm,
     paddingVertical: 2,
     borderRadius: BORDER_RADIUS.round,
     marginTop: SPACING.xs,
     gap: 4,
   },
-  metricChangeText: { 
-    fontSize: 10, 
-    fontWeight: '600' 
+  metricChangeText: {
+    fontSize: 10,
+    fontWeight: '600',
   },
-  card: { 
-    backgroundColor: COLORS.white, 
-    marginBottom: SPACING.lg, 
-    padding: SPACING.lg, 
-    borderRadius: BORDER_RADIUS.lg, 
-    ...SHADOWS.md 
+  card: {
+    backgroundColor: COLORS.white,
+    marginBottom: SPACING.lg,
+    padding: SPACING.lg,
+    borderRadius: BORDER_RADIUS.lg,
+    ...SHADOWS.md,
   },
-  cardHeader: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    marginBottom: SPACING.md 
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: SPACING.md,
   },
-  cardHeaderLeft: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: SPACING.sm 
+  cardHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: SPACING.sm,
   },
-  cardTitle: { 
-    fontSize: TYPOGRAPHY.sizes.lg, 
-    fontWeight: 'bold', 
-    color: '#1B2A4A' 
+  cardTitle: {
+    fontSize: TYPOGRAPHY.sizes.lg,
+    fontWeight: 'bold',
+    color: '#1B2A4A',
   },
-  viewAll: { 
-    fontSize: TYPOGRAPHY.sizes.sm, 
-    color: '#1B2A4A', 
-    fontWeight: '500' 
+  viewAll: {
+    fontSize: TYPOGRAPHY.sizes.sm,
+    color: '#1B2A4A',
+    fontWeight: '500',
   },
   emptyState: {
     alignItems: 'center',
@@ -342,9 +353,9 @@ const styles = StyleSheet.create({
     color: '#cbd5e1',
     marginTop: 2,
   },
-  matchItem: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
+  matchItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: SPACING.md,
     paddingVertical: SPACING.sm,
     borderBottomWidth: 1,
@@ -358,59 +369,59 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   matchInfo: { flex: 1 },
-  matchName: { 
-    fontSize: TYPOGRAPHY.sizes.md, 
-    fontWeight: '500', 
-    color: '#1B2A4A' 
+  matchName: {
+    fontSize: TYPOGRAPHY.sizes.md,
+    fontWeight: '500',
+    color: '#1B2A4A',
   },
-  matchIndustry: { 
-    fontSize: TYPOGRAPHY.sizes.xs, 
+  matchIndustry: {
+    fontSize: TYPOGRAPHY.sizes.xs,
     color: '#94a3b8',
     marginTop: 2,
   },
   matchStats: { alignItems: 'flex-end', gap: 4 },
-  matchScoreContainer: { 
-    paddingHorizontal: SPACING.sm, 
+  matchScoreContainer: {
+    paddingHorizontal: SPACING.sm,
     paddingVertical: 2,
     borderRadius: BORDER_RADIUS.round,
   },
-  matchScore: { 
-    fontSize: TYPOGRAPHY.sizes.sm, 
-    fontWeight: 'bold' 
+  matchScore: {
+    fontSize: TYPOGRAPHY.sizes.sm,
+    fontWeight: 'bold',
   },
-  viewAllButton: { 
-    marginTop: SPACING.md, 
-    alignItems: 'center' 
+  viewAllButton: {
+    marginTop: SPACING.md,
+    alignItems: 'center',
   },
-  viewAllText: { 
-    color: '#1B2A4A', 
-    fontSize: TYPOGRAPHY.sizes.sm, 
-    fontWeight: '500' 
+  viewAllText: {
+    color: '#1B2A4A',
+    fontSize: TYPOGRAPHY.sizes.sm,
+    fontWeight: '500',
   },
-  portfolioStats: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
+  portfolioStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: SPACING.lg,
   },
-  portfolioStat: { 
-    flex: 1, 
-    alignItems: 'center' 
+  portfolioStat: {
+    flex: 1,
+    alignItems: 'center',
   },
-  portfolioStatValue: { 
-    fontSize: TYPOGRAPHY.sizes.lg, 
-    fontWeight: 'bold', 
-    color: '#1B2A4A' 
+  portfolioStatValue: {
+    fontSize: TYPOGRAPHY.sizes.lg,
+    fontWeight: 'bold',
+    color: '#1B2A4A',
   },
-  portfolioStatLabel: { 
-    fontSize: TYPOGRAPHY.sizes.xs, 
-    color: '#94a3b8', 
-    marginTop: 4 
+  portfolioStatLabel: {
+    fontSize: TYPOGRAPHY.sizes.xs,
+    color: '#94a3b8',
+    marginTop: 4,
   },
-  portfolioDivider: { 
-    width: 1, 
-    height: 40, 
-    backgroundColor: '#f1f5f9' 
+  portfolioDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: '#f1f5f9',
   },
   portfolioButton: {
     borderRadius: BORDER_RADIUS.lg,
@@ -424,9 +435,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: SPACING.sm,
   },
-  portfolioButtonText: { 
-    color: COLORS.white, 
-    fontSize: TYPOGRAPHY.sizes.sm, 
-    fontWeight: '600' 
+  portfolioButtonText: {
+    color: COLORS.white,
+    fontSize: TYPOGRAPHY.sizes.sm,
+    fontWeight: '600',
   },
 });
