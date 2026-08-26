@@ -1,0 +1,2 @@
+ERROR 2026-08-26 11:08:54,730 log Internal Server Error: /api/auth/register/
+ERROR 2026-08-26 11:08:54,730 basehttp "POST /api/auth/register/ HTTP/1.1" 500 254

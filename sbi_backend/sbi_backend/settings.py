@@ -20,7 +20,7 @@ DEBUG = os.getenv("DEBUG", "False") == "True"
 # ============ SECURE ALLOWED HOSTS ============
 ALLOWED_HOSTS = config(
     'ALLOWED_HOSTS',
-    default='127.0.0.1,localhost,*.onrender.com,*.render.com'
+    default='127.0.0.1,localhost,sbi-app.onrender.com,nexus4ir.onrender.com'
 ).split(',')
 
 # ============ SUPABASE CONFIGURATION ============
