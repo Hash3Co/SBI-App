@@ -6,5 +6,3 @@ class AccountsConfig(AppConfig):
     label = 'accounts'
     verbose_name = 'User Accounts'
     
-    def ready(self):
-        import apps.accounts.signals  # Ensure signals are registered
