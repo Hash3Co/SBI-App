@@ -56,6 +56,17 @@ class CourseDetailView(generics.RetrieveAPIView):
     lookup_field = 'id'
     queryset = Course.objects.all()
 
+class EnrolledCoursesView(generics.ListAPIView):
+    """Get user's enrolled courses"""
+    serializer_class = CourseSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        # Get courses the user is enrolled in
+        progress = UserProgress.objects.filter(user=self.request.user)
+        course_ids = progress.values_list('course_id', flat=True)
+        return Course.objects.filter(id__in=course_ids, is_published=True)
+    
 class EnrollCourseView(APIView):
     """Enroll in a course"""
     permission_classes = [permissions.IsAuthenticated]

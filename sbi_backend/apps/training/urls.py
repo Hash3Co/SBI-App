@@ -12,6 +12,7 @@ from .views import (
     QuizResultListView,
     RecommendedCoursesView,
     CourseCategoriesView,
+    EnrolledCoursesView,
 )
 
 urlpatterns = [
@@ -19,6 +20,8 @@ urlpatterns = [
     path('courses/', CourseListView.as_view(), name='courses'),
     path('courses/recommended/', RecommendedCoursesView.as_view(), name='recommended_courses'),
     path('courses/categories/', CourseCategoriesView.as_view(), name='course_categories'),
+    path('courses/enrolled/', EnrolledCoursesView.as_view(), name='enrolled_courses'),
+    path('courses/<uuid:id>/progress/', CourseProgressView.as_view(), name='course_progress'),
     path('courses/<uuid:id>/', CourseDetailView.as_view(), name='course_detail'),
     path('courses/<uuid:id>/enroll/', EnrollCourseView.as_view(), name='enroll_course'),
     path('courses/<uuid:id>/progress/', CourseProgressView.as_view(), name='course_progress'),

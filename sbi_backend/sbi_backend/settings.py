@@ -154,6 +154,7 @@ INSTALLED_APPS = [
     'apps.training',
     'apps.payments',
     'apps.marketplace',
+    'apps.notifications',
 ]
 
 # ============ CORS SECURITY ============

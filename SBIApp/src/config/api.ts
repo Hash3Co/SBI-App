@@ -74,13 +74,29 @@ export const API_ENDPOINTS = {
     recommendations: `${API_CONFIG.baseURL}/marketplace/resources/recommendations/`,
   },
   notifications: {
+    // Notifications
     list: `${API_CONFIG.baseURL}/notifications/`,
-    markRead: `${API_CONFIG.baseURL}/notifications/mark-read/`,
-    markAllRead: `${API_CONFIG.baseURL}/notifications/mark-all-read/`,
     unreadCount: `${API_CONFIG.baseURL}/notifications/unread-count/`,
-    registerToken: `${API_CONFIG.baseURL}/notifications/register-token/`,
+    markRead: (id: string) => `${API_CONFIG.baseURL}/notifications/${id}/read/`,
+    markAllRead: `${API_CONFIG.baseURL}/notifications/mark-all-read/`,
     preferences: `${API_CONFIG.baseURL}/notifications/preferences/`,
+    
+    // Conversations
+    conversations: `${API_CONFIG.baseURL}/notifications/conversations/`,
+    conversationDetail: (id: string) => `${API_CONFIG.baseURL}/notifications/conversations/${id}/`,
+    conversationMarkRead: (id: string) => `${API_CONFIG.baseURL}/notifications/conversations/${id}/mark-read/`,
+    
+    // Messages
+    messages: `${API_CONFIG.baseURL}/notifications/messages/`,
+    messagesUnread: `${API_CONFIG.baseURL}/notifications/messages/unread-count/`,
+    messageRead: (id: string) => `${API_CONFIG.baseURL}/notifications/messages/${id}/read/`,
+    
+    // Devices
+    devices: `${API_CONFIG.baseURL}/notifications/devices/`,
+    registerDevice: `${API_CONFIG.baseURL}/notifications/devices/register/`,
+    deleteDevice: (id: string) => `${API_CONFIG.baseURL}/notifications/devices/${id}/`,
   },
+  
   health: `${API_CONFIG.baseURL}/health/`,
 };
 

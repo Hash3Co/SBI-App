@@ -172,13 +172,70 @@ export interface Document {
 
 export interface Notification {
   id: string;
-  userId: string;
+  type: 'match' | 'message' | 'system' | 'training' | 'payment' | 'marketplace' | 'investment' | 'follow';
   title: string;
   message: string;
-  type: 'match' | 'message' | 'system' | 'training';
-  read: boolean;
-  data?: any;
-  createdAt: string;
+  data: any;
+  is_read: boolean;
+  read_at: string | null;
+  action_url: string | null;
+  action_label: string | null;
+  created_at: string;
+}
+
+export interface Conversation {
+  id: string;
+  participants: User[];
+  match_id?: string;
+  last_message: Message | null;
+  unread_count: number;
+  last_message_at: string;
+  created_at: string;
+}
+
+export interface Message {
+  id: string;
+  conversation_id: string;
+  sender: User;
+  sender_name: string;
+  content: string;
+  attachment_url?: string;
+  attachment_type?: string;
+  is_read: boolean;
+  read_at: string | null;
+  status: 'sent' | 'delivered' | 'read';
+  created_at: string;
+}
+
+export interface NotificationPreferences {
+  email_match: boolean;
+  email_message: boolean;
+  email_system: boolean;
+  email_training: boolean;
+  email_payment: boolean;
+  email_marketplace: boolean;
+  push_match: boolean;
+  push_message: boolean;
+  push_system: boolean;
+  push_training: boolean;
+  push_payment: boolean;
+  push_marketplace: boolean;
+  inapp_match: boolean;
+  inapp_message: boolean;
+  inapp_system: boolean;
+  inapp_training: boolean;
+  inapp_payment: boolean;
+  inapp_marketplace: boolean;
+}
+
+export interface PushDevice {
+  id: string;
+  platform: 'ios' | 'android' | 'web';
+  device_token: string;
+  device_name: string;
+  is_active: boolean;
+  last_active: string;
+  created_at: string;
 }
 
 export interface ImpactMetric {

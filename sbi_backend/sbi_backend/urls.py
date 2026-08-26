@@ -71,6 +71,12 @@ def welcome(request):
                 'stats': '/api/marketplace/resources/stats/',
                 'recommendations': '/api/marketplace/resources/recommendations/',
             },
+            'notifications': {
+                'list': '/api/notifications/',
+                'mark_read': '/api/notifications/mark-read/<id>/',
+                'mark_all_read': '/api/notifications/mark-all-read/',
+                'unread_count': '/api/notifications/unread-count/',
+            },
         }
     })
 
@@ -89,6 +95,7 @@ def api_welcome(request):
             'training': '/api/training/',
             'payment': '/api/payment/',
             'marketplace': '/api/marketplace/',
+            'notifications': '/api/notifications/',
         }
     })
 
@@ -111,6 +118,7 @@ urlpatterns = [
     path('api/training/', include('apps.training.urls')),
     path('api/payment/', include('apps.payments.urls')),
     path('api/marketplace/', include('apps.marketplace.urls')),
+    path('api/notifications/', include('apps.notifications.urls')),
 ]
 
 # Serve static and media files in development

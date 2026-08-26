@@ -18,12 +18,43 @@ from django.conf import settings
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
 
+
 class SubscriptionPlanListView(generics.ListAPIView):
     """List all subscription plans"""
-    queryset = SubscriptionPlan.objects.filter(is_active=True)
-    serializer_class = SubscriptionPlanSerializer
     permission_classes = [permissions.AllowAny]
-
+    
+    def get(self, request):
+        # Return dummy data if no plans in database
+        plans = SubscriptionPlan.objects.filter(is_active=True)
+        if not plans.exists():
+            # Create default plans for testing
+            default_plans = [
+                {
+                    'id': '1',
+                    'name': 'Basic',
+                    'description': 'Essential features',
+                    'price': 250,
+                    'interval': 'month',
+                    'features': ['Basic features', 'Email support'],
+                    'is_popular': False,
+                    'role': 'all'
+                },
+                {
+                    'id': '2',
+                    'name': 'Pro',
+                    'description': 'Complete package',
+                    'price': 500,
+                    'interval': 'month',
+                    'features': ['All features', 'Priority support', 'Analytics'],
+                    'is_popular': True,
+                    'role': 'all'
+                }
+            ]
+            return Response(default_plans)
+        
+        serializer = SubscriptionPlanSerializer(plans, many=True)
+        return Response(serializer.data)
+    
 class CurrentSubscriptionView(APIView):
     """Get current user's subscription"""
     permission_classes = [permissions.IsAuthenticated]
