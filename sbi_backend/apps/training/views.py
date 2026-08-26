@@ -26,28 +26,32 @@ class CourseListView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        queryset = Course.objects.filter(is_published=True)
-        
-        # Filter by category
-        category = self.request.query_params.get('category')
-        if category:
-            queryset = queryset.filter(category=category)
-        
-        # Filter by level
-        level = self.request.query_params.get('level')
-        if level:
-            queryset = queryset.filter(level=level)
-        
-        # Search
-        search = self.request.query_params.get('search')
-        if search:
-            queryset = queryset.filter(
-                Q(title__icontains=search) |
-                Q(description__icontains=search) |
-                Q(instructor__icontains=search)
-            )
-        
-        return queryset.order_by('-created_at')
+        try:
+            queryset = Course.objects.filter(is_published=True)
+            
+            # Filter by category
+            category = self.request.query_params.get('category')
+            if category:
+                queryset = queryset.filter(category=category)
+            
+            # Filter by level
+            level = self.request.query_params.get('level')
+            if level:
+                queryset = queryset.filter(level=level)
+            
+            # Search
+            search = self.request.query_params.get('search')
+            if search:
+                queryset = queryset.filter(
+                    Q(title__icontains=search) |
+                    Q(description__icontains=search) |
+                    Q(instructor__icontains=search)
+                )
+            
+            return queryset.order_by('-created_at')
+        except Exception as e:
+            logger.error(f"Error in CourseListView: {str(e)}")
+            return Course.objects.none()
 
 class CourseDetailView(generics.RetrieveAPIView):
     """Get course details"""
@@ -62,11 +66,15 @@ class EnrolledCoursesView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        # Get courses the user is enrolled in
-        progress = UserProgress.objects.filter(user=self.request.user)
-        course_ids = progress.values_list('course_id', flat=True)
-        return Course.objects.filter(id__in=course_ids, is_published=True)
-    
+        try:
+            progress = UserProgress.objects.filter(user=self.request.user)
+            course_ids = progress.values_list('course_id', flat=True)
+            return Course.objects.filter(id__in=course_ids, is_published=True)
+        except Exception as e:
+            logger.error(f"Error in EnrolledCoursesView: {str(e)}")
+            return Course.objects.none()
+
+        
 class EnrollCourseView(APIView):
     """Enroll in a course"""
     permission_classes = [permissions.IsAuthenticated]
@@ -326,49 +334,20 @@ class QuizResultListView(generics.ListAPIView):
     def get_queryset(self):
         return QuizResult.objects.filter(user=self.request.user)
 
-class RecommendedCoursesView(APIView):
+class RecommendedCoursesView(generics.ListAPIView):
     """Get recommended courses"""
+    serializer_class = CourseSerializer
     permission_classes = [permissions.IsAuthenticated]
     
-    def get(self, request):
-        user = request.user
+    def get_queryset(self):
+        try:
+            user = self.request.user
+            enrolled = UserProgress.objects.filter(user=user).values_list('course_id', flat=True)
+            return Course.objects.filter(is_published=True).exclude(id__in=enrolled)[:6]
+        except Exception as e:
+            logger.error(f"Error in RecommendedCoursesView: {str(e)}")
+            return Course.objects.none()
         
-        # Get user's enrolled courses
-        enrolled = UserProgress.objects.filter(user=user).values_list('course_id', flat=True)
-        
-        # Get recommendations based on user's role and preferences
-        if user.role == 'sme':
-            # For SME, recommend based on industry
-            try:
-                sme = user.sme_profile.first()
-                if sme and sme.industry:
-                    recommendations = Course.objects.filter(
-                        is_published=True,
-                        category=sme.industry
-                    ).exclude(
-                        id__in=enrolled
-                    )[:6]
-                    
-                    # If not enough, add more courses
-                    if recommendations.count() < 6:
-                        extra = Course.objects.filter(
-                            is_published=True
-                        ).exclude(
-                            id__in=enrolled
-                        ).exclude(
-                            id__in=recommendations.values_list('id', flat=True)
-                        )[:6 - recommendations.count()]
-                        recommendations = list(recommendations) + list(extra)
-                    
-                    return Response(CourseSerializer(recommendations, many=True, context={'request': request}).data)
-            except:
-                pass
-        
-        # Default recommendations
-        recommendations = Course.objects.filter(is_published=True).exclude(id__in=enrolled)[:6]
-        
-        return Response(CourseSerializer(recommendations, many=True, context={'request': request}).data)
-
 class CourseCategoriesView(APIView):
     """Get all course categories"""
     permission_classes = [permissions.AllowAny]

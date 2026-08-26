@@ -25,15 +25,16 @@ class RegisterSerializer(serializers.ModelSerializer):
         }
     
     def validate_email(self, value):
-        # Check if email is already taken
+        if not value:
+            raise serializers.ValidationError("Email is required")
+        value = value.lower().strip()
         if User.objects.filter(email=value).exists():
             raise serializers.ValidationError("A user with this email already exists.")
-        return value.lower().strip()
+        return value
     
     def validate_full_name(self, value):
-        # Prevent SQL injection and XSS
-        if not re.match(r'^[a-zA-Z\s\-\.\']+$', value):
-            raise serializers.ValidationError("Invalid characters in name.")
+        if not value:
+            raise serializers.ValidationError("Full name is required")
         return value.strip()
     
     def validate(self, attrs):
@@ -55,7 +56,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 
 class LoginSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
-    password = serializers.CharField(required=True)
+    password = serializers.CharField(required=True, write_only=True)
     
     def validate_email(self, value):
         return value.lower().strip()
@@ -65,15 +66,10 @@ class UpdateProfileSerializer(serializers.ModelSerializer):
         model = User
         fields = ('full_name', 'phone_number')
         read_only_fields = ('email', 'role')
-    
-    def validate_full_name(self, value):
-        if not re.match(r'^[a-zA-Z\s\-\.\']+$', value):
-            raise serializers.ValidationError("Invalid characters in name.")
-        return value.strip()
 
 class ChangePasswordSerializer(serializers.Serializer):
-    old_password = serializers.CharField(required=True)
-    new_password = serializers.CharField(required=True)
+    old_password = serializers.CharField(required=True, write_only=True)
+    new_password = serializers.CharField(required=True, write_only=True)
     
     def validate_new_password(self, value):
         try:
@@ -84,20 +80,10 @@ class ChangePasswordSerializer(serializers.Serializer):
 
 class ForgotPasswordSerializer(serializers.Serializer):
     email = serializers.EmailField(required=True)
-    
-    def validate_email(self, value):
-        return value.lower().strip()
 
 class ResetPasswordSerializer(serializers.Serializer):
     token = serializers.CharField(required=True)
-    new_password = serializers.CharField(required=True)
-    
-    def validate_new_password(self, value):
-        try:
-            validate_password(value)
-        except ValidationError as e:
-            raise serializers.ValidationError(e.messages)
-        return value
+    new_password = serializers.CharField(required=True, write_only=True)
 
 class UserActivitySerializer(serializers.ModelSerializer):
     user_email = serializers.CharField(source='user.email', read_only=True)

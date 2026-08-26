@@ -1,4 +1,6 @@
 # apps/payments/views.py
+from asyncio.log import logger
+
 from rest_framework import generics, status, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -19,60 +21,68 @@ from django.conf import settings
 stripe.api_key = settings.STRIPE_SECRET_KEY
 
 
-class SubscriptionPlanListView(generics.ListAPIView):
+class SubscriptionPlanListView(APIView):
     """List all subscription plans"""
     permission_classes = [permissions.AllowAny]
     
     def get(self, request):
-        # Return dummy data if no plans in database
-        plans = SubscriptionPlan.objects.filter(is_active=True)
-        if not plans.exists():
-            # Create default plans for testing
-            default_plans = [
-                {
-                    'id': '1',
-                    'name': 'Basic',
-                    'description': 'Essential features',
-                    'price': 250,
-                    'interval': 'month',
-                    'features': ['Basic features', 'Email support'],
-                    'is_popular': False,
-                    'role': 'all'
-                },
-                {
-                    'id': '2',
-                    'name': 'Pro',
-                    'description': 'Complete package',
-                    'price': 500,
-                    'interval': 'month',
-                    'features': ['All features', 'Priority support', 'Analytics'],
-                    'is_popular': True,
-                    'role': 'all'
-                }
-            ]
-            return Response(default_plans)
+        try:
+            plans = SubscriptionPlan.objects.filter(is_active=True)
+            
+            # If no plans exist, return default plans
+            if not plans.exists():
+                default_plans = [
+                    {
+                        'id': '1',
+                        'name': 'Basic',
+                        'description': 'Essential features for your business',
+                        'price': 250,
+                        'interval': 'month',
+                        'features': ['Business profile', 'Basic matching', '3 training courses', 'Email support'],
+                        'is_popular': False,
+                        'role': 'all'
+                    },
+                    {
+                        'id': '2',
+                        'name': 'Pro',
+                        'description': 'Complete funding readiness package',
+                        'price': 500,
+                        'interval': 'month',
+                        'features': ['All Basic features', 'Advanced matching', 'All training courses', 'Certificate upon completion', 'Priority support'],
+                        'is_popular': True,
+                        'role': 'all'
+                    }
+                ]
+                return Response(default_plans)
+            
+            serializer = SubscriptionPlanSerializer(plans, many=True)
+            return Response(serializer.data)
+        except Exception as e:
+            logger.error(f"Error in SubscriptionPlanListView: {str(e)}")
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
-        serializer = SubscriptionPlanSerializer(plans, many=True)
-        return Response(serializer.data)
-    
 class CurrentSubscriptionView(APIView):
     """Get current user's subscription"""
     permission_classes = [permissions.IsAuthenticated]
     
     def get(self, request):
-        subscription = UserSubscription.objects.filter(
-            user=request.user,
-            status='active'
-        ).first()
-        
-        if subscription:
-            serializer = UserSubscriptionSerializer(subscription)
-            return Response(serializer.data)
-        
-        return Response({
-            'active': False,
-            'message': 'No active subscription'
-        })
+        try:
+            subscription = UserSubscription.objects.filter(
+                user=request.user,
+                status='active'
+            ).first()
+            
+            if subscription:
+                serializer = UserSubscriptionSerializer(subscription)
+                return Response(serializer.data)
+            
+            return Response({
+                'active': False,
+                'message': 'No active subscription'
+            })
+        except Exception as e:
+            logger.error(f"Error in CurrentSubscriptionView: {str(e)}")
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class CreatePaymentIntentView(APIView):
     """Create Stripe payment intent"""
@@ -256,8 +266,12 @@ class TransactionHistoryView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        return Transaction.objects.filter(user=self.request.user).order_by('-created_at')
-
+        try:
+            return Transaction.objects.filter(user=self.request.user).order_by('-created_at')
+        except Exception as e:
+            logger.error(f"Error in TransactionHistoryView: {str(e)}")
+            return Transaction.objects.none()
+        
 class CancelSubscriptionView(APIView):
     """Cancel user's subscription"""
     permission_classes = [permissions.IsAuthenticated]
@@ -309,14 +323,11 @@ class PaymentMethodListView(generics.ListCreateAPIView):
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        return PaymentMethod.objects.filter(user=self.request.user, is_active=True)
-    
-    def perform_create(self, serializer):
-        # Set other methods as not default if this is default
-        if serializer.validated_data.get('is_default', False):
-            PaymentMethod.objects.filter(user=self.request.user).update(is_default=False)
-        
-        serializer.save(user=self.request.user)
+        try:
+            return PaymentMethod.objects.filter(user=self.request.user, is_active=True)
+        except Exception as e:
+            logger.error(f"Error in PaymentMethodListView: {str(e)}")
+            return PaymentMethod.objects.none()
 
 class PaymentMethodDetailView(generics.RetrieveDestroyAPIView):
     """Get and delete payment method"""
@@ -325,7 +336,11 @@ class PaymentMethodDetailView(generics.RetrieveDestroyAPIView):
     lookup_field = 'id'
     
     def get_queryset(self):
-        return PaymentMethod.objects.filter(user=self.request.user)
+        try:
+            return PaymentMethod.objects.filter(user=self.request.user)
+        except Exception as e:
+            logger.error(f"Error in PaymentMethodDetailView: {str(e)}")
+            return PaymentMethod.objects.none()
     
     def perform_destroy(self, instance):
         instance.is_active = False

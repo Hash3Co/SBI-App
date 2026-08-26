@@ -25,35 +25,34 @@ class NotificationListView(generics.ListAPIView):
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        return Notification.objects.filter(user=self.request.user).order_by('-created_at')
+        try:
+            return Notification.objects.filter(user=self.request.user).order_by('-created_at')
+        except Exception as e:
+            logger.error(f"Error in NotificationListView: {str(e)}")
+            return Notification.objects.none()
     
     def list(self, request, *args, **kwargs):
-        queryset = self.get_queryset()
-        
-        # Filter by type
-        notification_type = request.query_params.get('type')
-        if notification_type:
-            queryset = queryset.filter(type=notification_type)
-        
-        # Filter by read status
-        is_read = request.query_params.get('is_read')
-        if is_read is not None:
-            is_read_bool = is_read.lower() == 'true'
-            queryset = queryset.filter(is_read=is_read_bool)
-        
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response({
+        try:
+            queryset = self.get_queryset()
+            page = self.paginate_queryset(queryset)
+            if page is not None:
+                serializer = self.get_serializer(page, many=True)
+                return self.get_paginated_response({
+                    'notifications': serializer.data,
+                    'unread_count': Notification.objects.filter(user=request.user, is_read=False).count()
+                })
+            
+            serializer = self.get_serializer(queryset, many=True)
+            return Response({
                 'notifications': serializer.data,
                 'unread_count': Notification.objects.filter(user=request.user, is_read=False).count()
             })
-        
-        serializer = self.get_serializer(queryset, many=True)
-        return Response({
-            'notifications': serializer.data,
-            'unread_count': Notification.objects.filter(user=request.user, is_read=False).count()
-        })
+        except Exception as e:
+            logger.error(f"Error in NotificationListView.list: {str(e)}")
+            return Response({
+                'notifications': [],
+                'unread_count': 0
+            })
 
 class NotificationMarkReadView(APIView):
     """Mark notification as read"""
@@ -91,11 +90,13 @@ class UnreadCountView(APIView):
     permission_classes = [permissions.IsAuthenticated]
     
     def get(self, request):
-        count = Notification.objects.filter(user=request.user, is_read=False).count()
-        return Response({
-            'count': count
-        })
-
+        try:
+            count = Notification.objects.filter(user=request.user, is_read=False).count()
+            return Response({'count': count})
+        except Exception as e:
+            logger.error(f"Error in UnreadCountView: {str(e)}")
+            return Response({'count': 0})
+        
 # ============ PUSH DEVICE VIEWS ============
 
 class PushDeviceRegisterView(generics.CreateAPIView):
@@ -316,3 +317,5 @@ class UnreadMessagesCountView(APIView):
         return Response({
             'unread_count': total_unread
         })
+
+    

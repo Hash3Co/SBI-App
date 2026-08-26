@@ -5,8 +5,6 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
-from django.core.mail import send_mail
-from django.utils.crypto import get_random_string
 from django.db import connection
 from django.core.cache import cache
 from .models import User, UserActivity
@@ -20,7 +18,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-# Health Check
+# ============ HEALTH CHECK ============
 @api_view(['GET'])
 @permission_classes([permissions.AllowAny])
 def health_check(request):
@@ -42,10 +40,11 @@ def health_check(request):
     
     return Response({
         'status': 'healthy' if db_healthy and cache_healthy else 'unhealthy',
-        'message': 'SBI Backend API',
+        'message': 'NEXUS4IR Backend API',
         'version': 'v1',
         'database': 'connected' if db_healthy else 'disconnected',
         'cache': 'connected' if cache_healthy else 'disconnected',
+        'environment': 'production',
         'endpoints': {
             'docs': '/api/docs/',
             'redoc': '/api/redoc/',
@@ -60,102 +59,198 @@ def health_check(request):
         }
     })
 
-
+# ============ REGISTER VIEW ============
 class RegisterView(generics.CreateAPIView):
+    """User registration endpoint"""
     serializer_class = RegisterSerializer
     permission_classes = [permissions.AllowAny]
     
     def create(self, request, *args, **kwargs):
         try:
+            logger.info(f"📝 Registration attempt for: {request.data.get('email')}")
+            
             serializer = self.get_serializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
+            if not serializer.is_valid():
+                logger.error(f"❌ Validation errors: {serializer.errors}")
+                return Response({
+                    'errors': serializer.errors,
+                    'message': 'Validation failed'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
             user = serializer.save()
+            
+            # Create profile based on role
+            if user.role == 'sme':
+                try:
+                    from apps.sme.models import SMEProfile
+                    SMEProfile.objects.create(
+                        user=user,
+                        business_name=f"{user.full_name}'s Business",
+                        industry='Technology',
+                        location=''
+                    )
+                except Exception as e:
+                    logger.warning(f"Could not create SME profile: {e}")
+            
+            elif user.role == 'investor':
+                try:
+                    from apps.investor.models import InvestorProfile
+                    InvestorProfile.objects.create(
+                        user=user,
+                        full_name=user.full_name,
+                        company_name='',
+                        location=''
+                    )
+                except Exception as e:
+                    logger.warning(f"Could not create Investor profile: {e}")
+            
+            # Log activity
+            try:
+                UserActivity.objects.create(
+                    user=user,
+                    action='register',
+                    ip_address=request.META.get('REMOTE_ADDR'),
+                    user_agent=request.META.get('HTTP_USER_AGENT')
+                )
+            except Exception as e:
+                logger.warning(f"Could not log activity: {e}")
+            
+            logger.info(f"✅ User registered successfully: {user.email}")
+            
+            # Generate JWT tokens
+            refresh = RefreshToken.for_user(user)
             
             return Response({
                 'user': UserSerializer(user).data,
+                'access': str(refresh.access_token),
+                'refresh': str(refresh),
                 'message': 'Registration successful'
             }, status=status.HTTP_201_CREATED)
+            
         except Exception as e:
+            logger.error(f"❌ Registration error: {str(e)}")
             return Response({
-                'error': str(e)
-            }, status=status.HTTP_400_BAD_REQUEST)
+                'error': str(e),
+                'message': 'Registration failed'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-# Login View
+# ============ LOGIN VIEW ============
 class LoginView(APIView):
+    """User login endpoint"""
     permission_classes = [permissions.AllowAny]
     
     def post(self, request):
-        serializer = LoginSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        
-        email = serializer.validated_data['email']
-        password = serializer.validated_data['password']
-        
-        user = authenticate(email=email, password=password)
-        
-        if not user:
+        try:
+            logger.info(f"🔐 Login attempt for: {request.data.get('email')}")
+            
+            serializer = LoginSerializer(data=request.data)
+            if not serializer.is_valid():
+                return Response({
+                    'errors': serializer.errors,
+                    'message': 'Validation failed'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            email = serializer.validated_data['email']
+            password = serializer.validated_data['password']
+            
+            # Authenticate
+            user = authenticate(email=email, password=password)
+            
+            if not user:
+                logger.warning(f"❌ Invalid credentials for: {email}")
+                return Response({
+                    'error': 'Invalid credentials',
+                    'message': 'Email or password is incorrect'
+                }, status=status.HTTP_401_UNAUTHORIZED)
+            
+            if not user.is_active:
+                return Response({
+                    'error': 'Account is deactivated',
+                    'message': 'This account has been deactivated'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Generate tokens
+            refresh = RefreshToken.for_user(user)
+            
+            # Log activity
+            try:
+                UserActivity.objects.create(
+                    user=user,
+                    action='login',
+                    ip_address=request.META.get('REMOTE_ADDR'),
+                    user_agent=request.META.get('HTTP_USER_AGENT')
+                )
+            except Exception as e:
+                logger.warning(f"Could not log activity: {e}")
+            
+            logger.info(f"✅ User logged in: {email}")
+            
             return Response({
-                'error': 'Invalid credentials'
-            }, status=status.HTTP_401_UNAUTHORIZED)
-        
-        if not user.is_active:
+                'access': str(refresh.access_token),
+                'refresh': str(refresh),
+                'user': UserSerializer(user).data
+            })
+            
+        except Exception as e:
+            logger.error(f"❌ Login error: {str(e)}")
             return Response({
-                'error': 'Account is deactivated'
-            }, status=status.HTTP_403_FORBIDDEN)
-        
-        refresh = RefreshToken.for_user(user)
-        
-        UserActivity.objects.create(
-            user=user,
-            action='login',
-            ip_address=request.META.get('REMOTE_ADDR'),
-            user_agent=request.META.get('HTTP_USER_AGENT')
-        )
-        
-        return Response({
-            'access': str(refresh.access_token),
-            'refresh': str(refresh),
-            'user': UserSerializer(user).data
-        })
+                'error': str(e),
+                'message': 'Login failed'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-# Logout View
+# ============ LOGOUT VIEW ============
 class LogoutView(APIView):
+    """User logout endpoint"""
+    permission_classes = [permissions.IsAuthenticated]
+    
     def post(self, request):
         try:
             refresh_token = request.data.get('refresh')
             if refresh_token:
-                token = RefreshToken(refresh_token)
-                token.blacklist()
+                try:
+                    token = RefreshToken(refresh_token)
+                    token.blacklist()
+                except Exception as e:
+                    logger.error(f"Token blacklist error: {e}")
+            
+            # Log activity
+            try:
+                UserActivity.objects.create(
+                    user=request.user,
+                    action='logout',
+                    ip_address=request.META.get('REMOTE_ADDR'),
+                    user_agent=request.META.get('HTTP_USER_AGENT')
+                )
+            except Exception as e:
+                logger.warning(f"Could not log activity: {e}")
+            
+            return Response({'message': 'Logout successful'})
+            
         except Exception as e:
-            logger.error(f"Logout error: {str(e)}")
-        
-        UserActivity.objects.create(
-            user=request.user,
-            action='logout',
-            ip_address=request.META.get('REMOTE_ADDR'),
-            user_agent=request.META.get('HTTP_USER_AGENT')
-        )
-        
-        return Response({'message': 'Logout successful'})
+            logger.error(f"Logout error: {e}")
+            return Response({'message': 'Logout successful'})
 
-# Profile View
+# ============ PROFILE VIEW ============
 class ProfileView(generics.RetrieveAPIView):
+    """Get current user profile"""
     serializer_class = UserSerializer
     permission_classes = [permissions.IsAuthenticated]
     
     def get_object(self):
         return self.request.user
 
-# Update Profile View
+# ============ UPDATE PROFILE VIEW ============
 class UpdateProfileView(generics.UpdateAPIView):
+    """Update user profile"""
     serializer_class = UpdateProfileSerializer
     permission_classes = [permissions.IsAuthenticated]
     
     def get_object(self):
         return self.request.user
 
-# Change Password View
+# ============ CHANGE PASSWORD VIEW ============
 class ChangePasswordView(APIView):
+    """Change user password"""
     permission_classes = [permissions.IsAuthenticated]
     
     def post(self, request):
@@ -172,17 +267,21 @@ class ChangePasswordView(APIView):
         user.set_password(serializer.validated_data['new_password'])
         user.save()
         
-        UserActivity.objects.create(
-            user=user,
-            action='change_password',
-            ip_address=request.META.get('REMOTE_ADDR'),
-            user_agent=request.META.get('HTTP_USER_AGENT')
-        )
+        try:
+            UserActivity.objects.create(
+                user=user,
+                action='change_password',
+                ip_address=request.META.get('REMOTE_ADDR'),
+                user_agent=request.META.get('HTTP_USER_AGENT')
+            )
+        except Exception as e:
+            logger.warning(f"Could not log activity: {e}")
         
         return Response({'message': 'Password updated successfully'})
 
-# Forgot Password View
+# ============ FORGOT PASSWORD VIEW ============
 class ForgotPasswordView(APIView):
+    """Request password reset"""
     permission_classes = [permissions.AllowAny]
     
     def post(self, request):
@@ -192,7 +291,8 @@ class ForgotPasswordView(APIView):
         email = serializer.validated_data['email']
         try:
             user = User.objects.get(email=email)
-            reset_token = get_random_string(64)
+            import secrets
+            reset_token = secrets.token_urlsafe(32)
             user.reset_token = reset_token
             user.save()
             
@@ -200,7 +300,7 @@ class ForgotPasswordView(APIView):
             send_mail(
                 'Password Reset',
                 f'Click here to reset your password: {reset_url}',
-                'noreply@sbiapp.com',
+                'noreply@nexus4ir.com',
                 [email],
                 fail_silently=True,
             )
@@ -211,8 +311,9 @@ class ForgotPasswordView(APIView):
             'message': 'If an account exists, instructions will be sent'
         })
 
-# Reset Password View
+# ============ RESET PASSWORD VIEW ============
 class ResetPasswordView(APIView):
+    """Reset password with token"""
     permission_classes = [permissions.AllowAny]
     
     def post(self, request):
@@ -234,8 +335,9 @@ class ResetPasswordView(APIView):
                 'error': 'Invalid or expired token'
             }, status=status.HTTP_400_BAD_REQUEST)
 
-# Verify Token View
+# ============ VERIFY TOKEN VIEW ============
 class VerifyTokenView(APIView):
+    """Verify JWT token"""
     permission_classes = [permissions.AllowAny]
     
     def get(self, request):
@@ -250,8 +352,9 @@ class VerifyTokenView(APIView):
             'message': 'No token provided'
         }, status=status.HTTP_401_UNAUTHORIZED)
 
-# User Activity View
+# ============ USER ACTIVITY VIEW ============
 class UserActivityView(generics.ListAPIView):
+    """Get user activity logs"""
     serializer_class = UserActivitySerializer
     permission_classes = [permissions.IsAuthenticated]
     
