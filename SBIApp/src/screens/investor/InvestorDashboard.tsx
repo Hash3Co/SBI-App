@@ -8,7 +8,6 @@ import {
   TouchableOpacity,
   RefreshControl,
   Animated,
-  Alert,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -18,7 +17,7 @@ import { useNotifications } from '../../context/NotificationContext';
 import { investorService } from '../../services';
 import { COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 
-// ✅ DEFAULT METRICS
+// ✅ DEFAULT METRICS - Always available
 const DEFAULT_METRICS = [
   { title: 'Jobs Created', value: '0', change: '+0%', icon: 'work', color: '#1B2A4A' },
   { title: 'SMEs Supported', value: '0', change: '+0%', icon: 'store', color: '#2A3F6A' },
@@ -27,7 +26,7 @@ const DEFAULT_METRICS = [
 ];
 
 export const InvestorDashboard = ({ navigation }: any) => {
-  const { user, logout } = useAuth(); // ✅ Get logout function
+  const { user } = useAuth();
   const { suggestions, fetchSuggestions } = useMatching();
   const { unreadCount } = useNotifications();
   const [refreshing, setRefreshing] = useState(false);
@@ -37,6 +36,8 @@ export const InvestorDashboard = ({ navigation }: any) => {
     avgROI: 0,
     impactScore: 0,
   });
+  
+  // ✅ ALWAYS use DEFAULT_METRICS as initial state
   const [impactMetrics, setImpactMetrics] = useState(DEFAULT_METRICS);
   const [fadeAnim] = useState(new Animated.Value(0));
 
@@ -49,38 +50,16 @@ export const InvestorDashboard = ({ navigation }: any) => {
     }).start();
   }, []);
 
-  // ✅ LOGOUT FUNCTION
-  const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Logout', 
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await logout();
-              // ✅ Navigation will be handled by AuthContext
-              // The app will automatically redirect to login
-            } catch (error) {
-              Alert.alert('Error', 'Failed to logout. Please try again.');
-            }
-          }
-        }
-      ]
-    );
-  };
-
   const fetchDashboardData = async () => {
     try {
+      // ✅ Safe fetching with Promise.allSettled - NEVER crashes
       const results = await Promise.allSettled([
         investorService.getPortfolio().catch(() => ({ totalInvested: 0, activeDeals: 0, avgROI: 0, impactScore: 0 })),
         investorService.getImpactMetrics().catch(() => []),
-        fetchSuggestions?.()?.catch(() => []) || Promise.resolve([]),
+        fetchSuggestions().catch(() => []),
       ]);
 
+      // ✅ Handle portfolio results safely
       const portfolioResult = results[0];
       if (portfolioResult.status === 'fulfilled' && portfolioResult.value) {
         setPortfolioStats({
@@ -91,9 +70,11 @@ export const InvestorDashboard = ({ navigation }: any) => {
         });
       }
 
+      // ✅ Handle metrics results safely - THIS WAS THE PROBLEM
       const metricsResult = results[1];
       if (metricsResult.status === 'fulfilled') {
         const metricsData = metricsResult.value;
+        // ✅ SAFE CHECK: Only update if we have valid array data
         if (metricsData && Array.isArray(metricsData) && metricsData.length > 0) {
           const mappedMetrics = metricsData.map((m: any) => ({
             title: m?.title || 'Unknown',
@@ -104,13 +85,24 @@ export const InvestorDashboard = ({ navigation }: any) => {
           }));
           setImpactMetrics(mappedMetrics);
         } else {
+          // ✅ Keep DEFAULT_METRICS if API returns empty/invalid
           setImpactMetrics(DEFAULT_METRICS);
         }
       } else {
+        // ✅ Keep DEFAULT_METRICS if API fails
         setImpactMetrics(DEFAULT_METRICS);
       }
+
+      // ✅ Handle suggestions safely
+      const suggestionsResult = results[2];
+      if (suggestionsResult.status === 'rejected') {
+        // Suggestions will stay as empty array from context
+        console.log('Suggestions not available');
+      }
+      
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
+      // ✅ Keep default values on any error
       setImpactMetrics(DEFAULT_METRICS);
     }
   };
@@ -121,9 +113,12 @@ export const InvestorDashboard = ({ navigation }: any) => {
     setRefreshing(false);
   };
 
+  // ✅ FIXED: renderMetrics with null/undefined safety
   const renderMetrics = () => {
+    // ✅ SAFETY CHECK: Ensure impactMetrics is an array
     const metrics = Array.isArray(impactMetrics) ? impactMetrics : DEFAULT_METRICS;
     
+    // ✅ SAFETY CHECK: If empty, use defaults
     if (metrics.length === 0) {
       return DEFAULT_METRICS.map((metric, index) => (
         <View key={`default-${index}`} style={styles.metricCard}>
@@ -145,6 +140,7 @@ export const InvestorDashboard = ({ navigation }: any) => {
       ));
     }
 
+    // ✅ Render actual metrics (now guaranteed to be an array)
     return metrics.map((metric, index) => (
       <View key={index} style={styles.metricCard}>
         <LinearGradient
@@ -167,7 +163,9 @@ export const InvestorDashboard = ({ navigation }: any) => {
     ));
   };
 
+  // ✅ FIXED: renderSuggestions with null/undefined safety
   const renderSuggestions = () => {
+    // ✅ SAFETY CHECK: Ensure suggestions is an array
     const items = Array.isArray(suggestions) ? suggestions : [];
     
     if (items.length === 0) {
@@ -233,19 +231,17 @@ export const InvestorDashboard = ({ navigation }: any) => {
             <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate('InvestorProfile')}>
               <Icon name="account-circle" size={28} color={COLORS.white} />
             </TouchableOpacity>
-            {/* ✅ LOGOUT BUTTON - Added to header */}
-            <TouchableOpacity style={styles.iconButton} onPress={handleLogout}>
-              <Icon name="logout" size={24} color={COLORS.white} />
-            </TouchableOpacity>
           </View>
         </View>
       </LinearGradient>
 
       <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
+        {/* ✅ Metrics Grid - Now 100% safe */}
         <View style={styles.metricsGrid}>
           {renderMetrics()}
         </View>
 
+        {/* Matches Card */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={styles.cardHeaderLeft}>
@@ -262,6 +258,7 @@ export const InvestorDashboard = ({ navigation }: any) => {
           </TouchableOpacity>
         </View>
 
+        {/* Portfolio Summary */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Portfolio Summary</Text>
           <View style={styles.portfolioStats}>
@@ -294,7 +291,7 @@ export const InvestorDashboard = ({ navigation }: any) => {
   );
 };
 
-// Keep your existing styles (they're fine)
+// Keep your existing styles exactly as they were...
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F7FA' },
   header: {
