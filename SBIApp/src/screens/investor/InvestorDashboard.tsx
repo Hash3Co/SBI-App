@@ -28,6 +28,8 @@ export const InvestorDashboard = ({ navigation }: any) => {
     avgROI: 0,
     impactScore: 0,
   });
+  
+  // ✅ Ensure impactMetrics is always an array
   const [impactMetrics, setImpactMetrics] = useState([
     { title: 'Jobs Created', value: '0', change: '+0%', icon: 'work', color: '#1B2A4A' },
     { title: 'SMEs Supported', value: '0', change: '+0%', icon: 'store', color: '#2A3F6A' },
@@ -48,9 +50,9 @@ export const InvestorDashboard = ({ navigation }: any) => {
   const fetchDashboardData = async () => {
     try {
       const [portfolio, metrics] = await Promise.all([
-        investorService.getPortfolio(),
-        investorService.getImpactMetrics(),
-        fetchSuggestions(),
+        investorService.getPortfolio().catch(() => ({ totalInvested: 0, activeDeals: 0, avgROI: 0, impactScore: 0 })),
+        investorService.getImpactMetrics().catch(() => []),
+        fetchSuggestions().catch(() => []),
       ]);
 
       setPortfolioStats({
@@ -60,7 +62,7 @@ export const InvestorDashboard = ({ navigation }: any) => {
         impactScore: portfolio?.impactScore || 0,
       });
 
-      // Handle metrics - check if it's an array and has data
+      // ✅ SAFE: Check if metrics is an array before mapping
       if (metrics && Array.isArray(metrics) && metrics.length > 0) {
         setImpactMetrics(metrics.map((m: any) => ({
           title: m.title || 'Unknown',
@@ -70,9 +72,10 @@ export const InvestorDashboard = ({ navigation }: any) => {
           color: m.color || '#1B2A4A',
         })));
       }
+      // If metrics is empty or not an array, keep default values
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
-      // Use default values on error
+      // Keep default values
     }
   };
 
@@ -80,6 +83,28 @@ export const InvestorDashboard = ({ navigation }: any) => {
     setRefreshing(true);
     await fetchDashboardData();
     setRefreshing(false);
+  };
+
+  // ✅ Ensure we're always rendering with valid data
+  const renderMetrics = () => {
+    return impactMetrics.map((metric, index) => (
+      <View key={index} style={styles.metricCard}>
+        <LinearGradient
+          colors={[metric.color + '15', metric.color + '05']}
+          style={styles.metricGradient}
+        >
+          <View style={[styles.metricIcon, { backgroundColor: metric.color + '20' }]}>
+            <Icon name={metric.icon} size={20} color={metric.color} />
+          </View>
+          <Text style={styles.metricValue}>{metric.value}</Text>
+          <Text style={styles.metricTitle}>{metric.title}</Text>
+          <View style={[styles.metricChange, { backgroundColor: metric.color + '15' }]}>
+            <Icon name="trending-up" size={12} color={metric.color} />
+            <Text style={[styles.metricChangeText, { color: metric.color }]}>{metric.change}</Text>
+          </View>
+        </LinearGradient>
+      </View>
+    ));
   };
 
   return (
@@ -117,26 +142,10 @@ export const InvestorDashboard = ({ navigation }: any) => {
 
       <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
         <View style={styles.metricsGrid}>
-          {impactMetrics.map((metric, index) => (
-            <View key={index} style={styles.metricCard}>
-              <LinearGradient
-                colors={[metric.color + '15', metric.color + '05']}
-                style={styles.metricGradient}
-              >
-                <View style={[styles.metricIcon, { backgroundColor: metric.color + '20' }]}>
-                  <Icon name={metric.icon} size={20} color={metric.color} />
-                </View>
-                <Text style={styles.metricValue}>{metric.value}</Text>
-                <Text style={styles.metricTitle}>{metric.title}</Text>
-                <View style={[styles.metricChange, { backgroundColor: metric.color + '15' }]}>
-                  <Icon name="trending-up" size={12} color={metric.color} />
-                  <Text style={[styles.metricChangeText, { color: metric.color }]}>{metric.change}</Text>
-                </View>
-              </LinearGradient>
-            </View>
-          ))}
+          {renderMetrics()}
         </View>
 
+        {/* Rest of your dashboard content */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={styles.cardHeaderLeft}>

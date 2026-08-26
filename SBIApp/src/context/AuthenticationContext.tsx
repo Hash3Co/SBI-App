@@ -1,6 +1,6 @@
 // src/context/AuthenticationContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Alert, AppState } from 'react-native';
+import { AppState } from 'react-native';
 import { secureStorage } from '../services/storage/secureStorage';
 import { authService } from '../services';
 import { User, UserRole } from '../types';
@@ -38,16 +38,16 @@ export const AuthenticationProvider: React.FC<{ children: React.ReactNode }> = (
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
+    checkAuthStatus();
+  }, []);
+
+  useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextAppState) => {
       if (nextAppState === 'active') {
         refreshUserData();
       }
     });
     return () => subscription.remove();
-  }, []);
-
-  useEffect(() => {
-    checkAuthStatus();
   }, []);
 
   const checkAuthStatus = async () => {
@@ -59,12 +59,10 @@ export const AuthenticationProvider: React.FC<{ children: React.ReactNode }> = (
         setUser(savedUser);
         await refreshUserData();
       } else {
-        await secureStorage.clearAll();
         setUser(null);
       }
     } catch (error) {
       console.error('Auth check failed:', error);
-      await secureStorage.clearAll();
       setUser(null);
     } finally {
       setIsLoading(false);
@@ -76,22 +74,33 @@ export const AuthenticationProvider: React.FC<{ children: React.ReactNode }> = (
       const token = await secureStorage.getToken();
       if (!token) return;
 
-      const updatedUser = await authService.getCurrentUser();
+      const updatedUser = await authService.getProfile();
       await secureStorage.setUserData('user', updatedUser);
       setUser(updatedUser);
     } catch (error) {
       console.warn('Failed to refresh user data:', error);
+      // If token is invalid, clear session
+      if (
+        error instanceof Error &&
+        'response' in error &&
+        typeof error.response === 'object' &&
+        error.response !== null &&
+        'status' in error.response &&
+        error.response.status === 401
+      ) {
+        await secureStorage.clearAll();
+        setUser(null);
+      }
     }
   };
 
   const login = async (email: string, password: string, role: UserRole) => {
     setIsLoading(true);
     try {
-      const response = await authService.login({ email, password, role });
+      const response = await authService.login({ email, password });
       setUser(response.user);
       showToast('Login successful!', 'success');
     } catch (error: any) {
-      console.error('Login error:', error);
       showToast(error.message || 'Login failed', 'error');
       throw error;
     } finally {
@@ -106,7 +115,6 @@ export const AuthenticationProvider: React.FC<{ children: React.ReactNode }> = (
       setUser(response.user);
       showToast('Registration successful!', 'success');
     } catch (error: any) {
-      console.error('Registration error:', error);
       showToast(error.message || 'Registration failed', 'error');
       throw error;
     } finally {
@@ -115,9 +123,14 @@ export const AuthenticationProvider: React.FC<{ children: React.ReactNode }> = (
   };
 
   const logout = async () => {
-    await authService.logout();
-    setUser(null);
-    showToast('Logged out successfully', 'info');
+    try {
+      await authService.logout();
+      setUser(null);
+      showToast('Logged out', 'info');
+    } catch (error) {
+      await secureStorage.clearAll();
+      setUser(null);
+    }
   };
 
   const verifySession = async (): Promise<boolean> => {
@@ -126,12 +139,10 @@ export const AuthenticationProvider: React.FC<{ children: React.ReactNode }> = (
 
   const updateUser = async (userData: Partial<User>) => {
     try {
-      if (!user) throw new Error('No user logged in');
       const updatedUser = await authService.updateProfile(userData);
       setUser(updatedUser);
-      showToast('Profile updated successfully', 'success');
+      showToast('Profile updated!', 'success');
     } catch (error) {
-      console.error('Failed to update user:', error);
       showToast('Failed to update profile', 'error');
       throw error;
     }

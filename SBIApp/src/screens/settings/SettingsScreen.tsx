@@ -29,22 +29,24 @@ export const SettingsScreen = ({ navigation }: any) => {
   }, []);
 
   const handleLogout = () => {
-    Alert.alert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Logout', style: 'destructive', onPress: async () => {
+  Alert.alert(
+    'Logout',
+    'Are you sure you want to logout?',
+    [
+      { text: 'Cancel', style: 'cancel' },
+      { 
+        text: 'Logout', 
+        style: 'destructive', 
+        onPress: async () => {
           await logout();
-          navigation.reset({
-            index: 0,
-            routes: [{ name: 'Auth' }],
-          });
-        }},
-      ],
-      { cancelable: true }
-    );
-  };
+          // ✅ Use navigation.replace or navigate back to Auth
+          navigation.navigate('Auth');
+        }
+      },
+    ],
+    { cancelable: true }
+  );
+};
 
   type SwitchSetting = {
     icon: string;

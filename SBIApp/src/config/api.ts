@@ -10,8 +10,9 @@ export const API_ENDPOINTS = {
     forgotPassword: `${API_CONFIG.baseURL}/auth/forgot-password/`,
     resetPassword: `${API_CONFIG.baseURL}/auth/reset-password/`,
     verifyEmail: `${API_CONFIG.baseURL}/auth/verify-email/`,
-    me: `${API_CONFIG.baseURL}/auth/profile/`,
-    profile: `${API_CONFIG.baseURL}/auth/profile/update/`,
+    // ✅ Profile endpoints
+    profile: `${API_CONFIG.baseURL}/auth/profile/`,  // GET
+    updateProfile: `${API_CONFIG.baseURL}/auth/profile/update/`,  // PUT
     verify: `${API_CONFIG.baseURL}/auth/verify/`,
     changePassword: `${API_CONFIG.baseURL}/auth/change-password/`,
   },
