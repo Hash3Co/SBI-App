@@ -257,7 +257,7 @@ REST_FRAMEWORK = {
         'rest_framework.parsers.FormParser',
         'rest_framework.parsers.MultiPartParser',
     ),
-    'EXCEPTION_HANDLER': 'apps.accounts.exceptions.custom_exception_handler',
+    #'EXCEPTION_HANDLER': 'apps.accounts.exceptions.custom_exception_handler',
 }
 
 # ============ JWT SECURITY ============
