@@ -7,6 +7,9 @@ from .models import InvestorProfile, Investment
 from .serializers import InvestorProfileSerializer, InvestmentSerializer
 from apps.matching.models import Match
 from apps.sme.models import SMEProfile
+import logging
+
+logger = logging.getLogger(__name__)
 
 class InvestorProfileView(generics.RetrieveAPIView):
     serializer_class = InvestorProfileSerializer
@@ -70,39 +73,74 @@ class PortfolioView(APIView):
         return min(100, (total / 1000000) * 20)
 
 class ImpactMetricsView(APIView):
+    """Get impact metrics"""
     permission_classes = [permissions.IsAuthenticated]
     
     def get(self, request):
-        user = request.user
-        if user.role != 'investor':
-            return Response({'error': 'User is not an investor'}, status=status.HTTP_403_FORBIDDEN)
-        
-        investments = Investment.objects.filter(investor=user)
-        total = investments.aggregate(total=Sum('amount'))['total'] or 0
-        
-        return Response([
-            {
-                'title': 'Jobs Created',
-                'value': int(total / 50000) if total > 0 else 0,
-                'change': 12.5,
-                'icon': 'work',
-                'color': '#1B2A4A'
-            },
-            {
-                'title': 'SMEs Supported',
-                'value': investments.count(),
-                'change': 8.3,
-                'icon': 'store',
-                'color': '#2A3F6A'
-            },
-            {
-                'title': 'CO₂ Reduced',
-                'value': int(total / 1000) if total > 0 else 0,
-                'change': 23.1,
-                'icon': 'eco',
-                'color': '#3A558A'
-            },
-        ])
+        try:
+            user = request.user
+            if user.role != 'investor':
+                return Response({
+                    'error': 'User is not an investor'
+                }, status=status.HTTP_403_FORBIDDEN)
+            
+            # Try to get investments, return empty if table doesn't exist
+            try:
+                investments = Investment.objects.filter(investor=user)
+                total = investments.aggregate(total=Sum('amount'))['total'] or 0
+            except Exception as e:
+                logger.warning(f"Investment table error: {e}")
+                investments = []
+                total = 0
+            
+            return Response([
+                {
+                    'title': 'Jobs Created',
+                    'value': int(total / 50000) if total > 0 else 0,
+                    'change': 12.5,
+                    'icon': 'work',
+                    'color': '#1B2A4A'
+                },
+                {
+                    'title': 'SMEs Supported',
+                    'value': investments.count() if hasattr(investments, 'count') else 0,
+                    'change': 8.3,
+                    'icon': 'store',
+                    'color': '#2A3F6A'
+                },
+                {
+                    'title': 'CO₂ Reduced',
+                    'value': int(total / 1000) if total > 0 else 0,
+                    'change': 23.1,
+                    'icon': 'eco',
+                    'color': '#3A558A'
+                },
+            ])
+        except Exception as e:
+            logger.error(f"Impact metrics error: {e}")
+            return Response([
+                {
+                    'title': 'Jobs Created',
+                    'value': 0,
+                    'change': 0,
+                    'icon': 'work',
+                    'color': '#1B2A4A'
+                },
+                {
+                    'title': 'SMEs Supported',
+                    'value': 0,
+                    'change': 0,
+                    'icon': 'store',
+                    'color': '#2A3F6A'
+                },
+                {
+                    'title': 'CO₂ Reduced',
+                    'value': 0,
+                    'change': 0,
+                    'icon': 'eco',
+                    'color': '#3A558A'
+                },
+            ])
 
 class InvestorMatchesView(APIView):
     permission_classes = [permissions.IsAuthenticated]

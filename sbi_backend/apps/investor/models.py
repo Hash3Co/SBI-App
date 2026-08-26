@@ -18,12 +18,7 @@ class InvestorProfile(models.Model):
     
     portfolio_value = models.DecimalField(max_digits=15, decimal_places=2, default=0)
     
-    VERIFICATION_STATUS = (
-        ('pending', 'Pending'),
-        ('verified', 'Verified'),
-        ('rejected', 'Rejected'),
-    )
-    verification_status = models.CharField(max_length=20, choices=VERIFICATION_STATUS, default='pending')
+    verification_status = models.CharField(max_length=20, default='pending')
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -35,6 +30,7 @@ class InvestorProfile(models.Model):
     def __str__(self):
         return self.full_name
 
+
 class Investment(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     investor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='investments_made')
@@ -44,14 +40,7 @@ class Investment(models.Model):
     equity = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     roi = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     
-    STATUS_CHOICES = (
-        ('pending', 'Pending'),
-        ('active', 'Active'),
-        ('completed', 'Completed'),
-        ('declined', 'Declined'),
-    )
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
-    
+    status = models.CharField(max_length=20, default='pending')
     date = models.DateTimeField(auto_now_add=True)
     notes = models.TextField(blank=True)
     
