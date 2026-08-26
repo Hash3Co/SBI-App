@@ -29,11 +29,12 @@ class UserManager(BaseUserManager):
         extra_fields.setdefault('role', 'admin')
         return self.create_user(email, password, **extra_fields)
 
+        
 class User(AbstractBaseUser, PermissionsMixin):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(unique=True, db_index=True)
     full_name = models.CharField(max_length=255, default='')
-    phone_number = models.CharField(max_length=20, blank=True)
+    phone_number = models.CharField(max_length=20, blank=True, null=True)
     
     ROLE_CHOICES = (
         ('sme', 'SME'),
@@ -50,9 +51,20 @@ class User(AbstractBaseUser, PermissionsMixin):
     verification_token = models.CharField(max_length=255, blank=True, null=True)
     reset_token = models.CharField(max_length=255, blank=True, null=True)
     
+    # Session management - ALLOW NULL
     last_login = models.DateTimeField(null=True, blank=True)
+    last_ip = models.GenericIPAddressField(null=True, blank=True)
+    last_user_agent = models.TextField(blank=True, null=True)  # Changed to allow null
+    session_key = models.CharField(max_length=255, blank=True, null=True)
+    
+    # Account lockout
+    failed_login_attempts = models.IntegerField(default=0)
+    locked_until = models.DateTimeField(null=True, blank=True)
+    
+    # Audit fields
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    deleted_at = models.DateTimeField(null=True, blank=True)
     
     objects = UserManager()
     
