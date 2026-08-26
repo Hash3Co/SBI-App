@@ -1,7 +1,6 @@
 # apps/notifications/admin.py
 from django.contrib import admin
-from .models import Notification, PushDevice, NotificationPreference
-from .messaging_models import Conversation, Message
+from .models import Notification, PushDevice, NotificationPreference ,Conversation, Message
 
 @admin.register(Notification)
 class NotificationAdmin(admin.ModelAdmin):

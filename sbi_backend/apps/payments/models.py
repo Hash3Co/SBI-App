@@ -5,8 +5,6 @@ from django.core.validators import MinValueValidator
 import uuid
 
 class SubscriptionPlan(models.Model):
-    """Subscription plans for users"""
-    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     name = models.CharField(max_length=100)
     description = models.TextField()
@@ -43,8 +41,6 @@ class SubscriptionPlan(models.Model):
         return f"{self.name} - {self.interval} - {self.price}"
 
 class UserSubscription(models.Model):
-    """User's active subscription"""
-    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='subscription')
     plan = models.ForeignKey(SubscriptionPlan, on_delete=models.PROTECT, related_name='subscribers')
@@ -76,8 +72,6 @@ class UserSubscription(models.Model):
         return f"{self.user.email} - {self.plan.name} - {self.status}"
 
 class Transaction(models.Model):
-    """Payment transactions"""
-    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='transactions')
     
@@ -121,8 +115,6 @@ class Transaction(models.Model):
         return f"{self.user.email} - {self.amount} - {self.status}"
 
 class PaymentMethod(models.Model):
-    """Saved payment methods"""
-    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='payment_methods')
     
@@ -134,7 +126,6 @@ class PaymentMethod(models.Model):
     )
     method_type = models.CharField(max_length=20, choices=METHOD_TYPES, default='card')
     
-    # Card details (encrypted)
     last4 = models.CharField(max_length=4)
     brand = models.CharField(max_length=50)
     expiry_month = models.CharField(max_length=2)

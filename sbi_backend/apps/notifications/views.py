@@ -5,7 +5,7 @@ from rest_framework.views import APIView
 from django.db.models import Q
 from django.utils import timezone
 from .models import Notification, PushDevice, NotificationPreference
-from .messaging_models import Conversation, Message
+from .models import Conversation, Message
 from .serializers import (
     NotificationSerializer, PushDeviceSerializer,
     NotificationPreferenceSerializer,

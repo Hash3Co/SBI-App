@@ -1,7 +1,12 @@
 # apps/notifications/serializers.py
 from rest_framework import serializers
-from .models import Notification, PushDevice, NotificationPreference
-from .messaging_models import Conversation, Message
+from .models import (
+    Conversation,
+    Message,
+    Notification,
+    NotificationPreference,
+    PushDevice,
+)
 from apps.accounts.serializers import UserSerializer
 
 class NotificationSerializer(serializers.ModelSerializer):

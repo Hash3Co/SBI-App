@@ -5,8 +5,6 @@ from django.core.validators import MinValueValidator, MaxValueValidator
 import uuid
 
 class Course(models.Model):
-    """Training course model"""
-    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     title = models.CharField(max_length=255)
     description = models.TextField()
@@ -38,8 +36,6 @@ class Course(models.Model):
         return self.title
 
 class Chapter(models.Model):
-    """Course chapter model"""
-    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='chapters')
     
@@ -95,14 +91,12 @@ class QuizQuestion(models.Model):
         return self.question[:50]
 
 class UserProgress(models.Model):
-    """User progress tracking for courses"""
-    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='training_progress')
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='user_progress')
     
     progress = models.IntegerField(default=0, validators=[MinValueValidator(0), MaxValueValidator(100)])
-    completed_chapters = models.JSONField(default=list)  # List of chapter IDs
+    completed_chapters = models.JSONField(default=list)
     completed_chapters_count = models.IntegerField(default=0)
     last_accessed = models.DateTimeField(auto_now=True)
     
@@ -118,24 +112,8 @@ class UserProgress(models.Model):
     
     def __str__(self):
         return f"{self.user.email} - {self.course.title} - {self.progress}%"
-    
-    def update_progress(self):
-        """Update progress based on completed chapters"""
-        total_chapters = self.course.chapters.count()
-        if total_chapters > 0:
-            self.progress = int((self.completed_chapters_count / total_chapters) * 100)
-        else:
-            self.progress = 0
-        
-        if self.progress == 100 and not self.is_completed:
-            self.is_completed = True
-            self.completed_at = timezone.now()
-        
-        self.save()
 
 class Certificate(models.Model):
-    """Course completion certificate"""
-    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='training_certificates')
     course = models.ForeignKey(Course, on_delete=models.CASCADE, related_name='certificates')

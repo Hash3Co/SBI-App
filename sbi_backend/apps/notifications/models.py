@@ -1,12 +1,10 @@
 # apps/notifications/models.py
 from django.db import models
 from django.conf import settings
-from django.utils import timezone
 import uuid
 
 class Notification(models.Model):
     """User notifications"""
-    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='notifications')
     
@@ -17,23 +15,19 @@ class Notification(models.Model):
         ('training', 'Training'),
         ('payment', 'Payment'),
         ('marketplace', 'Marketplace'),
-        ('investment', 'Investment'),
-        ('follow', 'Follow'),
     )
     type = models.CharField(max_length=20, choices=NOTIFICATION_TYPES)
     
     title = models.CharField(max_length=255)
     message = models.TextField()
-    data = models.JSONField(default=dict, blank=True)  # Additional data
+    data = models.JSONField(default=dict, blank=True)
     
     is_read = models.BooleanField(default=False)
     read_at = models.DateTimeField(null=True, blank=True)
     
-    # Action link
     action_url = models.CharField(max_length=500, blank=True, null=True)
     action_label = models.CharField(max_length=100, blank=True, null=True)
     
-    # For push notifications
     sent_push = models.BooleanField(default=False)
     push_sent_at = models.DateTimeField(null=True, blank=True)
     
@@ -43,38 +37,59 @@ class Notification(models.Model):
     class Meta:
         db_table = 'notifications'
         ordering = ['-created_at']
-        indexes = [
-            models.Index(fields=['user', 'is_read']),
-            models.Index(fields=['created_at']),
-            models.Index(fields=['type']),
-        ]
     
     def __str__(self):
         return f"{self.user.email} - {self.title}"
+
+class Conversation(models.Model):
+    """Chat conversation between users"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    participants = models.ManyToManyField(settings.AUTH_USER_MODEL, related_name='conversations')
+    match_id = models.UUIDField(null=True, blank=True)
+    last_message_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     
-    def mark_as_read(self):
-        if not self.is_read:
-            self.is_read = True
-            self.read_at = timezone.now()
-            self.save()
+    class Meta:
+        db_table = 'conversations'
+        ordering = ['-last_message_at']
     
-    @classmethod
-    def create_notification(cls, user, type, title, message, data=None, action_url=None, action_label=None):
-        """Create a new notification"""
-        notification = cls.objects.create(
-            user=user,
-            type=type,
-            title=title,
-            message=message,
-            data=data or {},
-            action_url=action_url,
-            action_label=action_label
-        )
-        return notification
+    def __str__(self):
+        return f"Conversation {self.id}"
+
+class Message(models.Model):
+    """Individual messages in a conversation"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name='messages')
+    sender = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='sent_messages')
+    
+    content = models.TextField()
+    
+    attachment_url = models.URLField(blank=True, null=True)
+    attachment_type = models.CharField(max_length=50, blank=True, null=True)
+    
+    is_read = models.BooleanField(default=False)
+    read_at = models.DateTimeField(null=True, blank=True)
+    
+    STATUS_CHOICES = (
+        ('sent', 'Sent'),
+        ('delivered', 'Delivered'),
+        ('read', 'Read'),
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='sent')
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'messages'
+        ordering = ['created_at']
+    
+    def __str__(self):
+        return f"{self.sender.email} - {self.content[:50]}"
 
 class PushDevice(models.Model):
     """User's push notification devices"""
-    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='push_devices')
     
@@ -104,11 +119,9 @@ class PushDevice(models.Model):
 
 class NotificationPreference(models.Model):
     """User's notification preferences"""
-    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='notification_preferences')
     
-    # Email preferences
     email_match = models.BooleanField(default=True)
     email_message = models.BooleanField(default=True)
     email_system = models.BooleanField(default=True)
@@ -116,7 +129,6 @@ class NotificationPreference(models.Model):
     email_payment = models.BooleanField(default=True)
     email_marketplace = models.BooleanField(default=True)
     
-    # Push preferences
     push_match = models.BooleanField(default=True)
     push_message = models.BooleanField(default=True)
     push_system = models.BooleanField(default=True)
@@ -124,7 +136,6 @@ class NotificationPreference(models.Model):
     push_payment = models.BooleanField(default=True)
     push_marketplace = models.BooleanField(default=True)
     
-    # In-app preferences
     inapp_match = models.BooleanField(default=True)
     inapp_message = models.BooleanField(default=True)
     inapp_system = models.BooleanField(default=True)
@@ -140,11 +151,3 @@ class NotificationPreference(models.Model):
     
     def __str__(self):
         return f"{self.user.email} - Preferences"
-    
-    @classmethod
-    def get_or_create_default(cls, user):
-        """Get or create default preferences"""
-        preferences, created = cls.objects.get_or_create(user=user)
-        return preferences
-
-    
