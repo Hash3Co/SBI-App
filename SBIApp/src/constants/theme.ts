@@ -1,65 +1,109 @@
-// constants/theme.ts
 import { Platform } from 'react-native';
 
-// Professional Color Palette - Minimal & Elegant
+
 export const COLORS = {
-  // Primary - Sophisticated Navy
-  primary: '#1a2332',
-  primaryLight: '#2c3e50',
-  primaryDark: '#0f1621',
-  primarySurface: '#f0f2f5',
+  // Primary Brand Colors - Deep Navy/Blue
+  primary: '#1B2A4A',
+  primaryLight: '#2A3F6A',
+  primaryDark: '#0F1A2E',
+  primarySurface: '#E8EDF4',
   
-  // Accent - Refined Gold
-  accent: '#c9a84c',
-  accentLight: '#dfc87a',
-  accentDark: '#a88b3a',
+  // Secondary Accent - Clean White/Silver
+  secondary: '#FFFFFF',
+  secondaryLight: '#F8F9FB',
+  secondaryDark: '#E2E8F0',
   
-  // Semantic Colors - Muted
-  success: '#2d8f5e',
-  successLight: '#e8f5ef',
-  error: '#c0392b',
-  errorLight: '#fdf0ed',
-  warning: '#d4a02b',
-  warningLight: '#fcf5e8',
-  info: '#3b7a9e',
-  infoLight: '#eef4f8',
+  // Accent - Gold/Amber
+  accent: '#D4A843',
+  accentLight: '#E8C96A',
+  accentDark: '#B8922A',
   
-  // Neutrals - Clean & Professional
-  white: '#ffffff',
+  // Semantic Colors
+  success: '#2E8B57',
+  successLight: '#E8F5EE',
+  error: '#C0392B',
+  errorLight: '#FDF0ED',
+  warning: '#D4A02B',
+  warningLight: '#FCF5E8',
+  info: '#3B7A9E',
+  infoLight: '#EEF4F8',
+  
+  // Neutrals
+  white: '#FFFFFF',
   black: '#000000',
-  gray50: '#f8f9fa',
-  gray100: '#f1f3f5',
-  gray200: '#e9ecef',
-  gray300: '#dee2e6',
-  gray400: '#ced4da',
-  gray500: '#adb5bd',
-  gray600: '#868e96',
+  gray50: '#F8F9FA',
+  gray100: '#F1F3F5',
+  gray200: '#E9ECEF',
+  gray300: '#DEE2E6',
+  gray400: '#CED4DA',
+  gray500: '#ADB5BD',
+  gray600: '#868E96',
   gray700: '#495057',
-  gray800: '#343a40',
+  gray800: '#343A40',
   gray900: '#212529',
   
   // Backgrounds
-  background: '#f8f9fa',
-  backgroundSecondary: '#ffffff',
-  card: '#ffffff',
+  background: '#F5F7FA',
+  backgroundSecondary: '#FFFFFF',
+  card: '#FFFFFF',
   
   // Text
-  textPrimary: '#1a2332',
+  textPrimary: '#1B2A4A',
   textSecondary: '#495057',
-  textTertiary: '#868e96',
-  textInverse: '#ffffff',
+  textTertiary: '#868E96',
+  textInverse: '#FFFFFF',
   
   // Borders
-  border: '#e9ecef',
-  borderLight: '#f1f3f5',
+  border: '#E9ECEF',
+  borderLight: '#F1F3F5',
   
   // Shadows
-  shadow: '#000000',
-  shadowLight: 'rgba(0,0,0,0.04)',
-  shadowMedium: 'rgba(0,0,0,0.08)',
+  shadow: '#1B2A4A',
+  shadowLight: 'rgba(27, 42, 74, 0.04)',
+  shadowMedium: 'rgba(27, 42, 74, 0.08)',
 };
 
-// Typography - Clean & Readable
+// Light Theme
+export const lightThemeColors = {
+  primary: '#1B2A4A',
+  primaryLight: '#2A3F6A',
+  primaryDark: '#0F1A2E',
+  primarySurface: '#E8EDF4',
+  background: '#F5F7FA',
+  card: '#FFFFFF',
+  text: '#1B2A4A',
+  textSecondary: '#495057',
+  textTertiary: '#868E96',
+  border: '#E9ECEF',
+  accent: '#D4A843',
+  success: '#2E8B57',
+  error: '#C0392B',
+  warning: '#D4A02B',
+  info: '#3B7A9E',
+};
+
+// Dark Theme
+export const darkThemeColors = {
+  primary: '#2A3F6A',
+  primaryLight: '#3A558A',
+  primaryDark: '#1B2A4A',
+  primarySurface: '#1A2A40',
+  background: '#0F1A2E',
+  card: '#1B2A4A',
+  text: '#FFFFFF',
+  textSecondary: '#B0C4DE',
+  textTertiary: '#8A9BB5',
+  border: '#2A3F6A',
+  accent: '#D4A843',
+  success: '#3AA06A',
+  error: '#D94A3A',
+  warning: '#E0B030',
+  info: '#4A8AB0',
+};
+
+export type ThemeColors = typeof lightThemeColors;
+
+// Typography
 export const TYPOGRAPHY = {
   fonts: {
     regular: Platform.OS === 'ios' ? 'System' : 'Roboto',
@@ -96,7 +140,7 @@ export const TYPOGRAPHY = {
   },
 };
 
-// Spacing - Consistent
+// Spacing
 export const SPACING = {
   xs: 4,
   sm: 8,
@@ -109,7 +153,7 @@ export const SPACING = {
   massive: 48,
 };
 
-// Border Radius - Subtle
+// Border Radius
 export const BORDER_RADIUS = {
   xs: 4,
   sm: 8,
@@ -120,7 +164,7 @@ export const BORDER_RADIUS = {
   round: 999,
 };
 
-// Shadows - Subtle & Elegant
+// Shadows
 export const SHADOWS = {
   none: {
     shadowColor: 'transparent',

@@ -1,3 +1,4 @@
+# apps/investor/models.py
 from django.db import models
 from django.conf import settings
 import uuid
@@ -7,63 +8,84 @@ class InvestorProfile(models.Model):
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='investor_profile')
     
     full_name = models.CharField(max_length=255)
-    company_name = models.CharField(max_length=255, blank=True, null=True)
-    
-    location = models.CharField(max_length=255)
-    city = models.CharField(max_length=100)
-    country = models.CharField(max_length=100)
+    company_name = models.CharField(max_length=255, blank=True)
+    location = models.CharField(max_length=255, blank=True)
     
     investment_interests = models.JSONField(default=list)
     preferred_industries = models.JSONField(default=list)
     funding_range_min = models.DecimalField(max_digits=15, decimal_places=2, default=0)
-    funding_range_max = models.DecimalField(max_digits=15, decimal_places=2, default=0)
+    funding_range_max = models.DecimalField(max_digits=15, decimal_places=2, default=1000000)
     
     portfolio_value = models.DecimalField(max_digits=15, decimal_places=2, default=0)
-    total_invested = models.DecimalField(max_digits=15, decimal_places=2, default=0)
-    active_investments = models.IntegerField(default=0)
     
-    jobs_created = models.IntegerField(default=0)
-    smes_supported = models.IntegerField(default=0)
-    co2_reduced = models.DecimalField(max_digits=15, decimal_places=2, default=0)
-    
-    verification_status = models.CharField(
-        max_length=20,
-        choices=(('pending', 'Pending'), ('verified', 'Verified'), ('rejected', 'Rejected')),
-        default='pending'
+    VERIFICATION_STATUS = (
+        ('pending', 'Pending'),
+        ('verified', 'Verified'),
+        ('rejected', 'Rejected'),
     )
-    verified_at = models.DateTimeField(blank=True, null=True)
+    verification_status = models.CharField(max_length=20, choices=VERIFICATION_STATUS, default='pending')
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         db_table = 'investor_profiles'
-        
+        ordering = ['-created_at']
+    
     def __str__(self):
-        return f"{self.full_name} - {self.company_name or 'Individual'}"
-
+        return self.full_name
 
 class Investment(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    investor = models.ForeignKey(InvestorProfile, on_delete=models.CASCADE, related_name='investments')
-    sme = models.ForeignKey('sme.SMEProfile', on_delete=models.CASCADE, related_name='investments')
+    investor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='investments_made')
+    sme = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='investments_received')
     
     amount = models.DecimalField(max_digits=15, decimal_places=2)
-    equity_percentage = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True)
+    equity = models.DecimalField(max_digits=5, decimal_places=2, default=0)
+    roi = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     
-    status = models.CharField(
-        max_length=20,
-        choices=(('pending', 'Pending'), ('completed', 'Completed'), ('cancelled', 'Cancelled')),
-        default='pending'
+    STATUS_CHOICES = (
+        ('pending', 'Pending'),
+        ('active', 'Active'),
+        ('completed', 'Completed'),
+        ('declined', 'Declined'),
     )
-    investment_date = models.DateTimeField()
-    completed_at = models.DateTimeField(blank=True, null=True)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     
-    current_value = models.DecimalField(max_digits=15, decimal_places=2, blank=True, null=True)
-    roi_percentage = models.DecimalField(max_digits=5, decimal_places=2, blank=True, null=True)
+    date = models.DateTimeField(auto_now_add=True)
+    notes = models.TextField(blank=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         db_table = 'investments'
+        ordering = ['-date']
+    
+    def __str__(self):
+        return f"{self.investor.email} - {self.sme.email} - {self.amount}"
+
+class InvestorActivityLog(models.Model):
+    """Activity log for investor actions"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    investor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='investor_activities')
+    
+    ACTION_CHOICES = (
+        ('profile_update', 'Profile Updated'),
+        ('investment_made', 'Investment Made'),
+        ('match_view', 'Match Viewed'),
+        ('match_connect', 'Match Connected'),
+        ('portfolio_view', 'Portfolio Viewed'),
+    )
+    action = models.CharField(max_length=50, choices=ACTION_CHOICES)
+    details = models.JSONField(default=dict, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    user_agent = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        db_table = 'investor_activity_logs'
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.investor.email} - {self.action} - {self.created_at}"

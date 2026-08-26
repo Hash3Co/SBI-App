@@ -1,6 +1,7 @@
+// src/services/smeService.ts
 import { apiClient } from './api/client';
 import { SecurityUtils } from '../utils/securityUtils';
-import { SMEProfile, Match } from '../types';
+import { SMEProfile, Match, Document } from '../types';
 import { API_ENDPOINTS } from '../config/api';
 
 export interface UpdateSMEProfileData {
@@ -10,7 +11,20 @@ export interface UpdateSMEProfileData {
   description?: string;
   fundingNeeded?: number;
   fundingPurpose?: string;
+  foundedYear?: number;
+  employeeCount?: string;
   financials?: { annualRevenue: number; profitMargin: number };
+}
+
+export interface ReadinessScore {
+  score: number;
+  breakdown: {
+    category: string;
+    score: number;
+    maxScore: number;
+    percentage: number;
+  }[];
+  recommendations: string[];
 }
 
 class SMEService {
@@ -27,14 +41,16 @@ class SMEService {
     if (data.description) sanitizedData.description = SecurityUtils.sanitizeInput(data.description);
     if (data.fundingNeeded) sanitizedData.funding_needed = data.fundingNeeded;
     if (data.fundingPurpose) sanitizedData.funding_purpose = SecurityUtils.sanitizeInput(data.fundingPurpose);
+    if (data.foundedYear) sanitizedData.founded_year = data.foundedYear;
+    if (data.employeeCount) sanitizedData.employee_count = data.employeeCount;
     if (data.financials) sanitizedData.financials = data.financials;
     
     const response = await apiClient.put<SMEProfile>(API_ENDPOINTS.sme.updateProfile, sanitizedData);
     return response.data;
   }
 
-  async getReadinessScore(): Promise<{ score: number; breakdown: any }> {
-    const response = await apiClient.get(API_ENDPOINTS.sme.readinessScore);
+  async getReadinessScore(): Promise<ReadinessScore> {
+    const response = await apiClient.get<ReadinessScore>(API_ENDPOINTS.sme.readinessScore);
     return response.data;
   }
 
@@ -43,8 +59,13 @@ class SMEService {
     return response.data;
   }
 
-  async uploadDocument(file: FormData): Promise<{ id: string; url: string }> {
-    const response = await apiClient.post(API_ENDPOINTS.sme.documents, file, {
+  async getDocuments(): Promise<Document[]> {
+    const response = await apiClient.get<Document[]>(API_ENDPOINTS.sme.documents);
+    return response.data;
+  }
+
+  async uploadDocument(file: FormData): Promise<Document> {
+    const response = await apiClient.post<Document>(API_ENDPOINTS.sme.documents, file, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     return response.data;
@@ -52,6 +73,11 @@ class SMEService {
 
   async deleteDocument(documentId: string): Promise<void> {
     await apiClient.delete(`${API_ENDPOINTS.sme.documents}${documentId}/`);
+  }
+
+  async getProfileCompletion(): Promise<{ percentage: number; missingFields: string[] }> {
+    const response = await apiClient.get(`${API_ENDPOINTS.sme.profile}completion/`);
+    return response.data;
   }
 }
 

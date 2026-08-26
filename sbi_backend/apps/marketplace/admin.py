@@ -1,10 +1,18 @@
 from django.contrib import admin
-from .models import MarketplaceResource, TradeRequest
+from .models import MarketplaceCategory, MarketplaceResource, SavedResource, TradeRequest
+
+@admin.register(MarketplaceCategory)
+class MarketplaceCategoryAdmin(admin.ModelAdmin):
+    list_display = ('id', 'name', 'slug', 'is_active', 'order')
+    list_filter = ('is_active',)
+    search_fields = ('name', 'slug')
+    prepopulated_fields = {'slug': ('name',)}
+    readonly_fields = ('id', 'created_at', 'updated_at')
 
 @admin.register(MarketplaceResource)
 class MarketplaceResourceAdmin(admin.ModelAdmin):
-    list_display = ('title', 'resource_type', 'country', 'price', 'seller', 'is_available', 'created_at')
-    list_filter = ('resource_type', 'country', 'is_available', 'created_at')
+    list_display = ('id', 'title', 'resource_type', 'country', 'price', 'seller', 'created_at')
+    list_filter = ('resource_type', 'country', 'created_at')
     search_fields = ('title', 'description', 'seller', 'seller_email')
     readonly_fields = ('id', 'created_at', 'updated_at')
     
@@ -44,11 +52,11 @@ class MarketplaceResourceAdmin(admin.ModelAdmin):
 
 @admin.register(TradeRequest)
 class TradeRequestAdmin(admin.ModelAdmin):
-    list_display = ('resource', 'requester', 'proposed_price', 'status', 'created_at')
+    list_display = ('id', 'resource', 'buyer', 'status', 'quantity', 'created_at')
     list_filter = ('status', 'created_at')
-    search_fields = ('resource__title', 'requester__email', 'message')
+    search_fields = ('resource__title', 'buyer__email', 'buyer__full_name')
     readonly_fields = ('id', 'created_at', 'updated_at')
-    
+
     actions = ['accept_requests', 'reject_requests']
     
     def accept_requests(self, request, queryset):
@@ -60,3 +68,12 @@ class TradeRequestAdmin(admin.ModelAdmin):
         updated = queryset.update(status='rejected')
         self.message_user(request, f'{updated} trade requests rejected.')
     reject_requests.short_description = "Reject selected requests"
+
+
+@admin.register(SavedResource)
+class SavedResourceAdmin(admin.ModelAdmin):
+    list_display = ('id', 'user', 'resource', 'saved_at')
+    list_filter = ('saved_at',)
+    search_fields = ('user__email', 'resource__title')
+    readonly_fields = ('id', 'saved_at')
+

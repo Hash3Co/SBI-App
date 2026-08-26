@@ -1,85 +1,48 @@
+# apps/sme/admin.py
 from django.contrib import admin
-from .models import SMEProfile, SMEDocument, SMEActivityLog
+from django.utils.html import format_html
+from .models import SMEProfile, SMEOnboarding, SMEDocument, SMEActivityLog
 
 @admin.register(SMEProfile)
 class SMEProfileAdmin(admin.ModelAdmin):
-    list_display = ('business_name', 'user', 'industry', 'location', 'readiness_score', 'verification_status', 'created_at')
-    list_filter = ('industry', 'verification_status', 'employee_count', 'created_at')
-    search_fields = ('business_name', 'user__email', 'registration_number', 'location')
-    readonly_fields = ('id', 'readiness_score', 'created_at', 'updated_at')
+    list_display = ('id', 'business_name', 'user', 'industry', 'location', 'verification_status', 'readiness_score')
+    list_filter = ('industry', 'verification_status', 'location')
+    search_fields = ('business_name', 'user__email', 'user__full_name', 'description')
+    readonly_fields = ('id', 'created_at', 'updated_at', 'readiness_score')
     
     fieldsets = (
         ('Business Information', {
-            'fields': ('user', 'business_name', 'registration_number', 'industry')
-        }),
-        ('Location', {
-            'fields': ('location', 'country', 'lesotho_district', 'sa_province', 'sa_city')
-        }),
-        ('Business Details', {
-            'fields': ('description', 'founded_year', 'employee_count')
+            'fields': ('user', 'business_name', 'industry', 'location', 'description')
         }),
         ('Financial Information', {
-            'fields': ('funding_needed', 'funding_purpose', 'annual_revenue', 'profit_margin')
+            'fields': ('founded_year', 'employee_count', 'funding_needed', 'funding_purpose')
         }),
-        ('Readiness', {
-            'fields': ('readiness_score',)
-        }),
-        ('Verification', {
-            'fields': ('verification_status', 'verified_at')
+        ('Status & Score', {
+            'fields': ('verification_status', 'readiness_score')
         }),
         ('Timestamps', {
-            'fields': ('created_at', 'updated_at')
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
         }),
     )
-    
-    actions = ['verify_smes', 'reject_smes', 'recalculate_readiness']
-    
-    def verify_smes(self, request, queryset):
-        from django.utils import timezone
-        updated = queryset.update(verification_status='verified', verified_at=timezone.now())
-        self.message_user(request, f'{updated} SMEs verified.')
-    verify_smes.short_description = "Verify selected SMEs"
-    
-    def reject_smes(self, request, queryset):
-        updated = queryset.update(verification_status='rejected')
-        self.message_user(request, f'{updated} SMEs rejected.')
-    reject_smes.short_description = "Reject selected SMEs"
-    
-    def recalculate_readiness(self, request, queryset):
-        from .services import calculate_readiness_score
-        for sme in queryset:
-            score_data = calculate_readiness_score(sme)
-            sme.readiness_score = score_data.get('overall_score', 0)
-            # If detailed breakdown is required, consider storing it in a related model or JSONField on SMEProfile.
-            sme.save()
-        self.message_user(request, f'{queryset.count()} readiness scores recalculated.')
-    recalculate_readiness.short_description = "Recalculate readiness scores"
 
+@admin.register(SMEOnboarding)
+class SMEOnboardingAdmin(admin.ModelAdmin):
+    list_display = ('sme', 'step', 'completed', 'completed_at')
+    list_filter = ('step', 'completed')
+    search_fields = ('sme__email', 'sme__full_name')
+    readonly_fields = ('id', 'created_at', 'updated_at')
 
 @admin.register(SMEDocument)
 class SMEDocumentAdmin(admin.ModelAdmin):
-    list_display = ('title', 'sme', 'document_type', 'file_size', 'is_verified', 'uploaded_at')
-    list_filter = ('document_type', 'is_verified', 'uploaded_at')
-    search_fields = ('title', 'sme__business_name')
-    readonly_fields = ('id', 'file_size', 'file_type', 'uploaded_at')
-    
-    actions = ['verify_documents']
-    
-    def verify_documents(self, request, queryset):
-        updated = queryset.update(is_verified=True)
-        self.message_user(request, f'{updated} documents verified.')
-    verify_documents.short_description = "Verify selected documents"
-
+    list_display = ('id', 'name', 'sme', 'document_type', 'uploaded_at')
+    list_filter = ('document_type', 'uploaded_at')
+    search_fields = ('name', 'sme__email', 'sme__business_name')
+    readonly_fields = ('id', 'uploaded_at')
 
 @admin.register(SMEActivityLog)
 class SMEActivityLogAdmin(admin.ModelAdmin):
-    list_display = ('sme', 'action', 'created_at', 'ip_address')
+    list_display = ('sme', 'action', 'created_at')
     list_filter = ('action', 'created_at')
-    search_fields = ('sme__business_name', 'action')
-    readonly_fields = ('sme', 'action', 'details', 'ip_address', 'created_at')
-    
-    def has_add_permission(self, request):
-        return False
-    
-    def has_change_permission(self, request, obj=None):
-        return False
+    search_fields = ('sme__email', 'sme__full_name')
+    readonly_fields = ('id', 'sme', 'action', 'details', 'ip_address', 'user_agent', 'created_at')

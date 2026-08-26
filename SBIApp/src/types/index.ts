@@ -1,4 +1,5 @@
-export type UserRole = 'sme' | 'investor';
+// src/types/index.ts
+export type UserRole = 'sme' | 'investor' | 'admin';
 
 export interface User {
   id: string;
@@ -66,6 +67,16 @@ export interface Match {
   updatedAt: string;
 }
 
+export interface MatchSuggestion {
+  id: string;
+  name: string;
+  industry: string;
+  matchScore: number;
+  location: string;
+  funding: number;
+  color?: string;
+}
+
 export interface Course {
   id: string;
   title: string;
@@ -106,6 +117,21 @@ export interface Question {
   correctAnswer: number;
 }
 
+export interface QuizResult {
+  passed: boolean;
+  score: number;
+  totalQuestions: number;
+  correctAnswers: number;
+}
+
+export interface Certificate {
+  id: string;
+  courseId: string;
+  userId: string;
+  url: string;
+  issuedAt: string;
+}
+
 export interface SubscriptionPlan {
   id: string;
   name: string;
@@ -123,9 +149,17 @@ export interface Transaction {
   amount: number;
   currency: string;
   status: 'pending' | 'completed' | 'failed' | 'refunded';
-  type: 'subscription' | 'course';
+  type: 'subscription' | 'course' | 'trial' | 'investment' | 'marketplace';
   description: string;
   createdAt: string;
+}
+
+export interface PaymentMethod {
+  id: string;
+  last4: string;
+  brand: string;
+  expiry: string;
+  isDefault: boolean;
 }
 
 export interface Document {
@@ -142,7 +176,7 @@ export interface Notification {
   title: string;
   message: string;
   type: 'match' | 'message' | 'system' | 'training';
-  isRead: boolean;
+  read: boolean;
   data?: any;
   createdAt: string;
 }
@@ -156,13 +190,66 @@ export interface ImpactMetric {
   color: string;
 }
 
+// Marketplace Types
 export interface MarketplaceResource {
   id: string;
   title: string;
-  type: string;
-  country: string;
-  price: number;
-  seller: string;
   description: string;
+  resource_type: string;
+  price: number;
+  currency: string;
+  country: string;
+  region?: string;
+  seller: User;
+  seller_name: string;
+  seller_email: string;
+  contact_phone?: string;
+  contact_website?: string;
+  image?: string;
+  attachments?: string[];
+  requirements?: string;
+  benefits?: string;
+  valid_from: string;
+  valid_until?: string;
+  status: 'draft' | 'published' | 'expired' | 'archived';
+  views: number;
+  saves: number;
+  is_saved?: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
+export interface TradeRequest {
+  id: string;
+  resource: string;
+  resource_title: string;
+  buyer: User;
+  buyer_name: string;
+  buyer_email: string;
+  message: string;
+  quantity: number;
+  proposed_price?: number;
+  status: 'pending' | 'accepted' | 'rejected' | 'completed';
+  buyer_notes?: string;
+  seller_response?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MarketplaceCategory {
+  id: string;
+  name: string;
+  slug: string;
+  description?: string;
+  icon?: string;
+  order: number;
+  is_active: boolean;
+}
+
+export interface ResourceFilter {
+  type?: string;
+  country?: string;
+  minPrice?: number;
+  maxPrice?: number;
+  search?: string;
+}

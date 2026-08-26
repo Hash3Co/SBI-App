@@ -1,58 +1,24 @@
+// src/context/PaymentContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { SubscriptionPlan, Transaction } from '../types';
-
-// Default subscription plans for when API is not available
-const DEFAULT_SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
-  {
-    id: 'basic_sme',
-    name: 'Basic SME',
-    description: 'Essential features for small businesses',
-    price: 250,
-    interval: 'month',
-    features: ['Business profile', 'Basic matching', '3 training courses', 'Email support'],
-    isPopular: false,
-    role: 'sme',
-  },
-  {
-    id: 'pro_sme',
-    name: 'Pro SME',
-    description: 'Complete funding readiness package',
-    price: 500,
-    interval: 'month',
-    features: ['All Basic features', 'Advanced matching', 'All training courses', 'Certificate upon completion', 'Priority support', 'Readiness score analysis'],
-    isPopular: true,
-    role: 'sme',
-  },
-  {
-    id: 'basic_investor',
-    name: 'Basic Investor',
-    description: 'Discover promising businesses',
-    price: 500,
-    interval: 'month',
-    features: ['View SME profiles', 'Basic search filters', 'Save favorites', 'Email alerts'],
-    isPopular: false,
-    role: 'investor',
-  },
-  {
-    id: 'pro_investor',
-    name: 'Pro Investor',
-    description: 'Premium deal flow access',
-    price: 1000,
-    interval: 'month',
-    features: ['All Basic features', 'Advanced analytics', 'Direct messaging', 'Portfolio tracking', 'Priority matching', 'Dedicated account manager'],
-    isPopular: true,
-    role: 'investor',
-  },
-];
+import { paymentService } from '../services';
+import { SubscriptionPlan, Transaction, PaymentMethod } from '../types';
+import { showToast } from '../components/Toast';
 
 interface PaymentContextType {
   subscriptionPlans: SubscriptionPlan[];
   currentSubscription: SubscriptionPlan | null;
+  subscriptionStatus: { active: boolean; expiresAt: string | null; autoRenew: boolean };
   transactions: Transaction[];
+  paymentMethods: PaymentMethod[];
   isLoading: boolean;
+  fetchPlans: () => Promise<void>;
+  fetchTransactions: () => Promise<void>;
+  fetchPaymentMethods: () => Promise<void>;
+  fetchSubscriptionStatus: () => Promise<void>;
   subscribe: (planId: string, paymentMethodId: string) => Promise<boolean>;
   cancelSubscription: () => Promise<boolean>;
+  addPaymentMethod: (paymentData: any) => Promise<PaymentMethod>;
+  removePaymentMethod: (methodId: string) => Promise<void>;
 }
 
 const PaymentContext = createContext<PaymentContextType | undefined>(undefined);
@@ -66,107 +32,97 @@ export const usePayment = () => {
 };
 
 export const PaymentProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [subscriptionPlans, setSubscriptionPlans] = useState<SubscriptionPlan[]>(DEFAULT_SUBSCRIPTION_PLANS);
+  const [subscriptionPlans, setSubscriptionPlans] = useState<SubscriptionPlan[]>([]);
   const [currentSubscription, setCurrentSubscription] = useState<SubscriptionPlan | null>(null);
+  const [subscriptionStatus, setSubscriptionStatus] = useState({ active: false, expiresAt: null, autoRenew: false });
   const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [paymentMethods, setPaymentMethods] = useState<PaymentMethod[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    loadSubscription();
-    loadTransactions();
-    fetchSubscriptionPlans();
+    loadAllData();
   }, []);
 
-  const fetchSubscriptionPlans = async () => {
+  const loadAllData = async () => {
+    setIsLoading(true);
     try {
-      // Try to fetch from API if backend is available
-      // For now, keep using default plans
-      // In production, uncomment this:
-      // const response = await apiClient.get('/payments/plans/');
-      // setSubscriptionPlans(response.data);
-      setSubscriptionPlans(DEFAULT_SUBSCRIPTION_PLANS);
+      await Promise.all([
+        fetchPlans(),
+        fetchSubscriptionStatus(),
+        fetchTransactions(),
+        fetchPaymentMethods(),
+      ]);
     } catch (error) {
-      console.error('Failed to fetch subscription plans:', error);
-      setSubscriptionPlans(DEFAULT_SUBSCRIPTION_PLANS);
+      console.error('Failed to load payment data:', error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const loadSubscription = async () => {
+  const fetchPlans = async () => {
     try {
-      const saved = await AsyncStorage.getItem('currentSubscription');
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          setCurrentSubscription(parsed);
-        } catch (parseError) {
-          console.error('Failed to parse subscription:', parseError);
-          setCurrentSubscription(null);
-        }
-      }
+      const data = await paymentService.getSubscriptionPlans();
+      setSubscriptionPlans(data);
     } catch (error) {
-      console.error('Failed to load subscription:', error);
+      console.error('Failed to fetch plans:', error);
+      setSubscriptionPlans([]);
+    }
+  };
+
+  const fetchSubscriptionStatus = async () => {
+    try {
+      const status = await paymentService.getCurrentSubscription();
+      setSubscriptionStatus(status);
+      setCurrentSubscription(status.plan);
+    } catch (error) {
+      console.error('Failed to fetch subscription status:', error);
+      setSubscriptionStatus({ active: false, expiresAt: null, autoRenew: false });
       setCurrentSubscription(null);
     }
   };
 
-  const loadTransactions = async () => {
+  const fetchTransactions = async () => {
     try {
-      const saved = await AsyncStorage.getItem('transactions');
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          setTransactions(Array.isArray(parsed) ? parsed : []);
-        } catch (parseError) {
-          console.error('Failed to parse transactions:', parseError);
-          setTransactions([]);
-        }
-      }
+      const data = await paymentService.getTransactionHistory(50);
+      setTransactions(data);
     } catch (error) {
-      console.error('Failed to load transactions:', error);
+      console.error('Failed to fetch transactions:', error);
       setTransactions([]);
+    }
+  };
+
+  const fetchPaymentMethods = async () => {
+    try {
+      const data = await paymentService.getPaymentMethods();
+      setPaymentMethods(data);
+    } catch (error) {
+      console.error('Failed to fetch payment methods:', error);
+      setPaymentMethods([]);
     }
   };
 
   const subscribe = async (planId: string, paymentMethodId: string): Promise<boolean> => {
     setIsLoading(true);
     try {
-      // Validate inputs
-      if (!planId) {
-        throw new Error('Plan ID is required');
-      }
-      if (!paymentMethodId || paymentMethodId.trim().length === 0) {
-        throw new Error('Valid payment method required');
+      if (!planId || !paymentMethodId) {
+        throw new Error('Plan ID and payment method are required');
       }
 
-      const plan = subscriptionPlans.find(p => p.id === planId);
-      if (!plan) {
-        throw new Error('Plan not found');
-      }
-
-      // Simulate API call - replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 1500));
-
-      setCurrentSubscription(plan);
-      await AsyncStorage.setItem('currentSubscription', JSON.stringify(plan));
-
-      const transaction: Transaction = {
-        id: `tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-        userId: 'current_user',
-        amount: plan.price,
-        currency: 'ZAR',
-        status: 'completed',
-        type: 'subscription',
-        description: `${plan.name} subscription`,
-        createdAt: new Date().toISOString(),
-      };
+      const intent = await paymentService.createPaymentIntent(planId);
+      const success = await paymentService.confirmPayment(intent.clientSecret);
       
-      const updatedTransactions = [transaction, ...transactions];
-      setTransactions(updatedTransactions);
-      await AsyncStorage.setItem('transactions', JSON.stringify(updatedTransactions));
-      
-      return true;
-    } catch (error) {
+      if (success) {
+        await Promise.all([
+          fetchSubscriptionStatus(),
+          fetchTransactions(),
+        ]);
+        showToast('Subscription activated successfully!', 'success');
+        return true;
+      }
+      return false;
+    } catch (error: any) {
       console.error('Subscription failed:', error);
+      showToast(error.message || 'Subscription failed', 'error');
       return false;
     } finally {
       setIsLoading(false);
@@ -176,32 +132,61 @@ export const PaymentProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const cancelSubscription = async (): Promise<boolean> => {
     setIsLoading(true);
     try {
-      // Simulate API call - replace with actual API call
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      setCurrentSubscription(null);
-      await AsyncStorage.removeItem('currentSubscription');
-      
+      await paymentService.cancelSubscription();
+      await fetchSubscriptionStatus();
+      showToast('Subscription cancelled successfully', 'success');
       return true;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Cancellation failed:', error);
+      showToast(error.message || 'Cancellation failed', 'error');
       return false;
     } finally {
       setIsLoading(false);
     }
   };
 
+  const addPaymentMethod = async (paymentData: any): Promise<PaymentMethod> => {
+    try {
+      const method = await paymentService.addPaymentMethod(paymentData);
+      setPaymentMethods(prev => [...prev, method]);
+      showToast('Payment method added successfully', 'success');
+      return method;
+    } catch (error: any) {
+      console.error('Failed to add payment method:', error);
+      showToast(error.message || 'Failed to add payment method', 'error');
+      throw error;
+    }
+  };
+
+  const removePaymentMethod = async (methodId: string): Promise<void> => {
+    try {
+      await paymentService.deletePaymentMethod(methodId);
+      setPaymentMethods(prev => prev.filter(m => m.id !== methodId));
+      showToast('Payment method removed', 'success');
+    } catch (error: any) {
+      console.error('Failed to remove payment method:', error);
+      showToast(error.message || 'Failed to remove payment method', 'error');
+      throw error;
+    }
+  };
+
   return (
-    <PaymentContext.Provider 
-      value={{ 
-        subscriptionPlans, 
-        currentSubscription, 
-        transactions, 
-        isLoading, 
-        subscribe, 
-        cancelSubscription 
-      }}
-    >
+    <PaymentContext.Provider value={{
+      subscriptionPlans,
+      currentSubscription,
+      subscriptionStatus,
+      transactions,
+      paymentMethods,
+      isLoading,
+      fetchPlans,
+      fetchTransactions,
+      fetchPaymentMethods,
+      fetchSubscriptionStatus,
+      subscribe,
+      cancelSubscription,
+      addPaymentMethod,
+      removePaymentMethod,
+    }}>
       {children}
     </PaymentContext.Provider>
   );

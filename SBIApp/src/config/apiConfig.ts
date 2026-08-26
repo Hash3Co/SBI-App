@@ -1,34 +1,41 @@
 // src/config/apiConfig.ts
 import { Platform } from 'react-native';
+import { APP_CONFIG } from './appConfig';
 
-// Determine if we're in development
-const isDevelopment = __DEV__;
+// ============================================================
+// YOUR RENDER BACKEND URL
+// ============================================================
+const RENDER_BACKEND_URL = 'https://sbi-app.onrender.com';
+// ============================================================
 
-// For iOS simulator, use localhost; for Android emulator, use 10.0.2.2
-// For physical device, use your computer's local IP
+// For local development only
 const getLocalIP = () => {
-  // Use your computer's local IP address
-  return '10.0.0.3'; // Your machine IP
+  if (Platform.OS === 'android') return '10.0.2.2';
+  if (Platform.OS === 'ios') return '127.0.0.1';
+  return '192.168.1.100';
 };
 
+// Set to true for production, false for local development
+const USE_RENDER = true; // ← Make sure this is TRUE
+
 export const API_CONFIG = {
-  // Base URL configuration
-  baseURL: isDevelopment 
-    ? `http://${getLocalIP()}:8000/api`  // Local development
-    : 'https://sbi-app.onrender.com/api', // Production
+  baseURL: USE_RENDER 
+    ? `${RENDER_BACKEND_URL}/api/v1`  // Production on Render
+    : `http://${getLocalIP()}:8000/api/v1`, // Local development
   
-  // Alternative if you want to use a different port
-  // For example, if backend runs on port 8000
   timeout: 30000,
   retryCount: 3,
   retryDelay: 1000,
   
-  // Additional config
   headers: {
     'Content-Type': 'application/json',
     Accept: 'application/json',
+    'X-Platform': Platform.OS,
+    'X-App-Version': APP_CONFIG.version,
+    'X-App-Name': APP_CONFIG.name,
   },
 };
 
-// For debugging
-console.log(`API Base URL: ${API_CONFIG.baseURL}`);
+console.log(`🔗 API Base URL: ${API_CONFIG.baseURL}`);
+console.log(`🌐 Using Render: ${USE_RENDER}`);
+console.log(`📱 Platform: ${Platform.OS}`);

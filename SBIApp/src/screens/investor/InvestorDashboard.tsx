@@ -1,119 +1,75 @@
-import React, { useState, useRef } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Animated, Dimensions } from 'react-native';
+// src/screens/investor/InvestorDashboard.tsx
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Animated } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useAuth } from '../../context/AuthenticationContext';
+import { useMatching } from '../../context/MatchingContext';
+import { useNotifications } from '../../context/NotificationContext';
+import { investorService } from '../../services';
 import { COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
-
-const { width } = Dimensions.get('window');
 
 export const InvestorDashboard = ({ navigation }: any) => {
   const { user } = useAuth();
+  const { suggestions, fetchSuggestions } = useMatching();
+  const { unreadCount } = useNotifications();
   const [refreshing, setRefreshing] = useState(false);
-  const scrollX = useRef(new Animated.Value(0)).current;
-  
-  const [matches] = useState([
-    { id: '1', name: 'Tech Solutions Ltd', industry: 'Technology', matchScore: 92, impact: 'High', color: '#6366f1' },
-    { id: '2', name: 'Green Energy Africa', industry: 'Energy', matchScore: 88, impact: 'Very High', color: '#06b6d4' },
-    { id: '3', name: 'AgriFresh', industry: 'Agriculture', matchScore: 85, impact: 'Medium', color: '#10b981' },
+  const [portfolioStats, setPortfolioStats] = useState({
+    totalInvested: 0,
+    activeDeals: 0,
+    avgROI: 0,
+    impactScore: 0,
+  });
+  const [impactMetrics, setImpactMetrics] = useState([
+    { title: 'Jobs Created', value: '0', change: '+0%', icon: 'work', color: '#1B2A4A' },
+    { title: 'SMEs Supported', value: '0', change: '+0%', icon: 'store', color: '#2A3F6A' },
+    { title: 'CO₂ Reduced', value: '0', change: '+0%', icon: 'eco', color: '#3A558A' },
+    { title: 'Women-Led', value: '0', change: '+0%', icon: 'female', color: '#D4A843' },
   ]);
+  const [fadeAnim] = useState(new Animated.Value(0));
 
-  const impactMetrics = [
-    { title: 'Jobs Created', value: '1,247', change: '+12.5%', icon: 'work', color: '#6366f1' },
-    { title: 'SMEs Supported', value: '89', change: '+8.3%', icon: 'store', color: '#ec4899' },
-    { title: 'CO₂ Reduced', value: '3,452', change: '+23.1%', icon: 'eco', color: '#06b6d4' },
-    { title: 'Women-Led', value: '34', change: '+15.2%', icon: 'female', color: '#f59e0b' },
-  ];
+  useEffect(() => {
+    fetchDashboardData();
+    Animated.timing(fadeAnim, {
+      toValue: 1,
+      duration: 400,
+      useNativeDriver: true,
+    }).start();
+  }, []);
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 1500);
+  const fetchDashboardData = async () => {
+    try {
+      const [portfolio, metrics] = await Promise.all([
+        investorService.getPortfolio(),
+        investorService.getImpactMetrics(),
+        fetchSuggestions(),
+      ]);
+      
+      setPortfolioStats({
+        totalInvested: portfolio.totalInvested || 0,
+        activeDeals: portfolio.activeDeals || 0,
+        avgROI: portfolio.avgROI || 0,
+        impactScore: portfolio.impactScore || 0,
+      });
+
+      if (metrics && metrics.length > 0) {
+        setImpactMetrics(metrics.map(m => ({
+          title: m.title,
+          value: m.value,
+          change: `+${m.change}%`,
+          icon: m.icon,
+          color: m.color || '#1B2A4A',
+        })));
+      }
+    } catch (error) {
+      console.error('Failed to fetch dashboard data:', error);
+    }
   };
 
-  const renderCarousel = () => {
-    const totalCards = 3;
-    return (
-      <View style={styles.carouselContainer}>
-        <Animated.ScrollView
-          horizontal
-          pagingEnabled
-          showsHorizontalScrollIndicator={false}
-          onScroll={Animated.event(
-            [{ nativeEvent: { contentOffset: { x: scrollX } } }],
-            { useNativeDriver: true }
-          )}
-          scrollEventThrottle={16}
-        >
-          <View style={styles.carouselCard}>
-            <LinearGradient colors={['#6366f1', '#4f46e5']} style={styles.carouselGradient}>
-              <View style={styles.carouselContent}>
-                <Text style={styles.carouselTitle}>Portfolio Value</Text>
-                <Text style={styles.carouselValue}>M 12.4M</Text>
-                <Text style={styles.carouselChange}>↑ 24.5% ROI</Text>
-                <TouchableOpacity style={styles.carouselButton}>
-                  <Text style={styles.carouselButtonText}>View Details</Text>
-                  <Icon name="arrow-forward" size={16} color={COLORS.white} />
-                </TouchableOpacity>
-              </View>
-            </LinearGradient>
-          </View>
-          <View style={styles.carouselCard}>
-            <LinearGradient colors={['#ec4899', '#db2777']} style={styles.carouselGradient}>
-              <View style={styles.carouselContent}>
-                <Text style={styles.carouselTitle}>Active Deals</Text>
-                <Text style={styles.carouselValue}>18</Text>
-                <Text style={styles.carouselChange}>↑ 3 new this month</Text>
-                <TouchableOpacity style={styles.carouselButton}>
-                  <Text style={styles.carouselButtonText}>View Deals</Text>
-                  <Icon name="arrow-forward" size={16} color={COLORS.white} />
-                </TouchableOpacity>
-              </View>
-            </LinearGradient>
-          </View>
-          <View style={styles.carouselCard}>
-            <LinearGradient colors={['#06b6d4', '#0891b2']} style={styles.carouselGradient}>
-              <View style={styles.carouselContent}>
-                <Text style={styles.carouselTitle}>Impact Score</Text>
-                <Text style={styles.carouselValue}>86</Text>
-                <Text style={styles.carouselChange}>↑ ESG Rating</Text>
-                <TouchableOpacity style={styles.carouselButton}>
-                  <Text style={styles.carouselButtonText}>View Impact</Text>
-                  <Icon name="arrow-forward" size={16} color={COLORS.white} />
-                </TouchableOpacity>
-              </View>
-            </LinearGradient>
-          </View>
-        </Animated.ScrollView>
-        <View style={styles.dotsContainer}>
-          {[...Array(totalCards)].map((_, i) => {
-            const inputRange = [(i - 1) * width, i * width, (i + 1) * width];
-            // ✅ Use scale and opacity instead of width
-            const scale = scrollX.interpolate({
-              inputRange,
-              outputRange: [0.8, 1.2, 0.8],
-              extrapolate: 'clamp',
-            });
-            const opacity = scrollX.interpolate({
-              inputRange,
-              outputRange: [0.3, 1, 0.3],
-              extrapolate: 'clamp',
-            });
-            return (
-              <Animated.View
-                key={i}
-                style={[
-                  styles.dot,
-                  { 
-                    opacity, 
-                    transform: [{ scale }],
-                  }
-                ]}
-              />
-            );
-          })}
-        </View>
-      </View>
-    );
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchDashboardData();
+    setRefreshing(false);
   };
 
   return (
@@ -123,7 +79,7 @@ export const InvestorDashboard = ({ navigation }: any) => {
       showsVerticalScrollIndicator={false}
     >
       <LinearGradient 
-        colors={['#6366f1', '#4f46e5', '#4338ca']} 
+        colors={['#1B2A4A', '#2A3F6A', '#3A558A']} 
         style={styles.header}
         start={{x: 0, y: 0}}
         end={{x: 1, y: 0}}
@@ -136,9 +92,11 @@ export const InvestorDashboard = ({ navigation }: any) => {
           <View style={styles.headerActions}>
             <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate('Notifications')}>
               <Icon name="notifications-none" size={24} color={COLORS.white} />
-              <View style={styles.notificationBadge}>
-                <Text style={styles.notificationCount}>3</Text>
-              </View>
+              {unreadCount > 0 && (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationCount}>{unreadCount}</Text>
+                </View>
+              )}
             </TouchableOpacity>
             <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate('InvestorProfile')}>
               <Icon name="account-circle" size={28} color={COLORS.white} />
@@ -147,132 +105,103 @@ export const InvestorDashboard = ({ navigation }: any) => {
         </View>
       </LinearGradient>
 
-      {renderCarousel()}
-
-      <View style={styles.metricsGrid}>
-        {impactMetrics.map((metric) => (
-          <View key={metric.title} style={styles.metricCard}>
-            <LinearGradient
-              colors={[metric.color + '15', metric.color + '05']}
-              style={styles.metricGradient}
-            >
-              <View style={[styles.metricIcon, { backgroundColor: metric.color + '20' }]}>
-                <Icon name={metric.icon} size={20} color={metric.color} />
-              </View>
-              <Text style={styles.metricValue}>{metric.value}</Text>
-              <Text style={styles.metricTitle}>{metric.title}</Text>
-              <View style={[styles.metricChange, { backgroundColor: metric.color + '15' }]}>
-                <Icon name="trending-up" size={12} color={metric.color} />
-                <Text style={[styles.metricChangeText, { color: metric.color }]}>{metric.change}</Text>
-              </View>
-            </LinearGradient>
-          </View>
-        ))}
-      </View>
-
-      <View style={styles.esgCard}>
-        <View style={styles.esgHeader}>
-          <View style={styles.esgIcon}>
-            <Icon name="verified" size={20} color={COLORS.white} />
-          </View>
-          <Text style={styles.esgTitle}>ESG Impact Score</Text>
-          <Text style={styles.esgSubtitle}>Sustainability Rating</Text>
-        </View>
-        
-        <View style={styles.esgScoreContainer}>
-          <View style={styles.esgScoreCircle}>
-            <LinearGradient colors={['#10b981', '#059669']} style={styles.esgCircleGradient}>
-              <Text style={styles.esgScore}>86</Text>
-              <Text style={styles.esgMax}>/100</Text>
-            </LinearGradient>
-          </View>
+      <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
+        <View style={styles.metricsGrid}>
+          {impactMetrics.map((metric) => (
+            <View key={metric.title} style={styles.metricCard}>
+              <LinearGradient
+                colors={[metric.color + '15', metric.color + '05']}
+                style={styles.metricGradient}
+              >
+                <View style={[styles.metricIcon, { backgroundColor: metric.color + '20' }]}>
+                  <Icon name={metric.icon} size={20} color={metric.color} />
+                </View>
+                <Text style={styles.metricValue}>{metric.value}</Text>
+                <Text style={styles.metricTitle}>{metric.title}</Text>
+                <View style={[styles.metricChange, { backgroundColor: metric.color + '15' }]}>
+                  <Icon name="trending-up" size={12} color={metric.color} />
+                  <Text style={[styles.metricChangeText, { color: metric.color }]}>{metric.change}</Text>
+                </View>
+              </LinearGradient>
+            </View>
+          ))}
         </View>
 
-        <View style={styles.esgBreakdown}>
-          <View style={styles.esgItem}>
-            <View style={[styles.esgDot, { backgroundColor: '#27ae60' }]} />
-            <Text style={styles.esgItemText}>Environmental</Text>
-            <Text style={styles.esgItemValue}>82</Text>
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <View style={styles.cardHeaderLeft}>
+              <Icon name="people" size={24} color="#1B2A4A" />
+              <Text style={styles.cardTitle}>High-Impact Matches</Text>
+            </View>
+            <TouchableOpacity onPress={() => navigation.navigate('Matching')}>
+              <Text style={styles.viewAll}>View All</Text>
+            </TouchableOpacity>
           </View>
-          <View style={styles.esgItem}>
-            <View style={[styles.esgDot, { backgroundColor: '#3498db' }]} />
-            <Text style={styles.esgItemText}>Social</Text>
-            <Text style={styles.esgItemValue}>91</Text>
-          </View>
-          <View style={styles.esgItem}>
-            <View style={[styles.esgDot, { backgroundColor: '#f39c12' }]} />
-            <Text style={styles.esgItemText}>Governance</Text>
-            <Text style={styles.esgItemValue}>85</Text>
-          </View>
-        </View>
-      </View>
-
-      <View style={styles.matchesCard}>
-        <View style={styles.cardHeader}>
-          <Text style={styles.sectionTitle}>High-Impact Matches</Text>
-          <TouchableOpacity onPress={() => navigation.navigate('Matching')}>
-            <Text style={styles.viewAll}>View All</Text>
+          {suggestions.length === 0 ? (
+            <View style={styles.emptyState}>
+              <Icon name="people" size={48} color="#DEE2E6" />
+              <Text style={styles.emptyStateText}>No suggestions yet</Text>
+              <Text style={styles.emptyStateSubtext}>We'll find matches for you soon</Text>
+            </View>
+          ) : (
+            suggestions.slice(0, 3).map((item) => (
+              <TouchableOpacity 
+                key={item.id} 
+                style={styles.matchItem}
+                onPress={() => navigation.navigate('Matching')}
+              >
+                <View style={[styles.matchIcon, { backgroundColor: '#1B2A4A' + '20' }]}>
+                  <Icon name="business" size={20} color="#1B2A4A" />
+                </View>
+                <View style={styles.matchInfo}>
+                  <Text style={styles.matchName}>{item.name}</Text>
+                  <Text style={styles.matchIndustry}>{item.industry}</Text>
+                </View>
+                <View style={styles.matchStats}>
+                  <View style={[styles.matchScoreContainer, { backgroundColor: '#1B2A4A' + '15' }]}>
+                    <Text style={[styles.matchScore, { color: '#1B2A4A' }]}>{item.matchScore}%</Text>
+                  </View>
+                </View>
+              </TouchableOpacity>
+            ))
+          )}
+          <TouchableOpacity style={styles.viewAllButton} onPress={() => navigation.navigate('Matching')}>
+            <Text style={styles.viewAllText}>View All Matches</Text>
           </TouchableOpacity>
         </View>
-        {matches.map((match) => (
-          <TouchableOpacity 
-            key={match.id} 
-            style={styles.matchItem}
-            onPress={() => navigation.navigate('Matching')}
-          >
-            <View style={[styles.matchIcon, { backgroundColor: match.color + '20' }]}>
-              <Icon name="business" size={20} color={match.color} />
-            </View>
-            <View style={styles.matchInfo}>
-              <Text style={styles.matchName}>{match.name}</Text>
-              <Text style={styles.matchIndustry}>{match.industry}</Text>
-            </View>
-            <View style={styles.matchStats}>
-              <View style={[styles.matchScoreContainer, { backgroundColor: match.color + '15' }]}>
-                <Text style={[styles.matchScore, { color: match.color }]}>{match.matchScore}%</Text>
-              </View>
-              <View style={styles.matchImpact}>
-                <Icon name="eco" size={12} color={match.matchScore >= 85 ? '#10b981' : '#f59e0b'} />
-                <Text style={[styles.matchImpactText, { color: match.matchScore >= 85 ? '#10b981' : '#f59e0b' }]}>
-                  {match.impact}
-                </Text>
-              </View>
-            </View>
-          </TouchableOpacity>
-        ))}
-      </View>
 
-      <View style={styles.portfolioCard}>
-        <Text style={styles.sectionTitle}>Portfolio Summary</Text>
-        <View style={styles.portfolioStats}>
-          <View style={styles.portfolioStat}>
-            <Text style={styles.portfolioStatValue}>M 12.4M</Text>
-            <Text style={styles.portfolioStatLabel}>Total Invested</Text>
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>Portfolio Summary</Text>
+          <View style={styles.portfolioStats}>
+            <View style={styles.portfolioStat}>
+              <Text style={styles.portfolioStatValue}>M {portfolioStats.totalInvested.toLocaleString()}</Text>
+              <Text style={styles.portfolioStatLabel}>Total Invested</Text>
+            </View>
+            <View style={styles.portfolioDivider} />
+            <View style={styles.portfolioStat}>
+              <Text style={styles.portfolioStatValue}>{portfolioStats.activeDeals}</Text>
+              <Text style={styles.portfolioStatLabel}>Active Deals</Text>
+            </View>
+            <View style={styles.portfolioDivider} />
+            <View style={styles.portfolioStat}>
+              <Text style={styles.portfolioStatValue}>{portfolioStats.avgROI}%</Text>
+              <Text style={styles.portfolioStatLabel}>Avg ROI</Text>
+            </View>
           </View>
-          <View style={styles.portfolioDivider} />
-          <View style={styles.portfolioStat}>
-            <Text style={styles.portfolioStatValue}>18</Text>
-            <Text style={styles.portfolioStatLabel}>Active Deals</Text>
-          </View>
-          <View style={styles.portfolioDivider} />
-          <View style={styles.portfolioStat}>
-            <Text style={styles.portfolioStatValue}>24.5%</Text>
-            <Text style={styles.portfolioStatLabel}>Avg ROI</Text>
-          </View>
+          <TouchableOpacity style={styles.portfolioButton} onPress={() => navigation.navigate('Portfolio')}>
+            <LinearGradient colors={['#1B2A4A', '#2A3F6A']} style={styles.portfolioGradient}>
+              <Text style={styles.portfolioButtonText}>View Full Portfolio</Text>
+              <Icon name="arrow-forward" size={16} color={COLORS.white} />
+            </LinearGradient>
+          </TouchableOpacity>
         </View>
-        <TouchableOpacity style={styles.portfolioButton}>
-          <LinearGradient colors={['#6366f1', '#4f46e5']} style={styles.portfolioGradient}>
-            <Text style={styles.portfolioButtonText}>View Full Portfolio</Text>
-            <Icon name="arrow-forward" size={16} color={COLORS.white} />
-          </LinearGradient>
-        </TouchableOpacity>
-      </View>
+      </Animated.View>
     </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
+  container: { flex: 1, backgroundColor: '#F5F7FA' },
   header: { 
     paddingHorizontal: SPACING.xl,
     paddingTop: SPACING.xxxl,
@@ -295,8 +224,15 @@ const styles = StyleSheet.create({
     color: COLORS.white,
     marginTop: 2,
   },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: SPACING.md },
-  iconButton: { padding: SPACING.xs, position: 'relative' },
+  headerActions: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: SPACING.md 
+  },
+  iconButton: { 
+    padding: SPACING.xs, 
+    position: 'relative' 
+  },
   notificationBadge: {
     position: 'absolute',
     top: 0,
@@ -313,61 +249,12 @@ const styles = StyleSheet.create({
     color: COLORS.white, 
     fontWeight: 'bold' 
   },
-  carouselContainer: { marginTop: -30, marginHorizontal: SPACING.lg },
-  carouselCard: { 
-    width: width - SPACING.xl * 2, 
-    paddingHorizontal: 4 
-  },
-  carouselGradient: { 
-    borderRadius: BORDER_RADIUS.xl, 
-    padding: SPACING.xl,
-    ...SHADOWS.lg,
-  },
-  carouselContent: { gap: SPACING.xs },
-  carouselTitle: { 
-    fontSize: TYPOGRAPHY.sizes.md, 
-    color: 'rgba(255,255,255,0.8)',
-    fontWeight: '500',
-  },
-  carouselValue: { 
-    fontSize: 36, 
-    fontWeight: 'bold', 
-    color: COLORS.white,
-    marginVertical: 4,
-  },
-  carouselChange: { 
-    fontSize: TYPOGRAPHY.sizes.md, 
-    color: 'rgba(255,255,255,0.9)',
-  },
-  carouselButton: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: SPACING.xs,
-    marginTop: SPACING.md,
-  },
-  carouselButtonText: { 
-    fontSize: TYPOGRAPHY.sizes.sm, 
-    color: COLORS.white, 
-    fontWeight: '600' 
-  },
-  dotsContainer: { 
-    flexDirection: 'row', 
-    justifyContent: 'center', 
-    alignItems: 'center',
-    marginTop: SPACING.md,
-    gap: 8,
-  },
-  dot: { 
-    height: 8,
-    width: 8,
-    borderRadius: 4,
-    backgroundColor: '#6366f1',
-  },
+  content: { padding: SPACING.lg, paddingBottom: SPACING.xxxl },
   metricsGrid: { 
     flexDirection: 'row', 
     flexWrap: 'wrap', 
-    padding: SPACING.lg,
     gap: SPACING.md,
+    marginBottom: SPACING.lg,
   },
   metricCard: { 
     flex: 1, 
@@ -392,7 +279,7 @@ const styles = StyleSheet.create({
   metricValue: { 
     fontSize: TYPOGRAPHY.sizes.xl, 
     fontWeight: 'bold', 
-    color: '#1e293b' 
+    color: '#1B2A4A' 
   },
   metricTitle: { 
     fontSize: TYPOGRAPHY.sizes.xs, 
@@ -413,97 +300,12 @@ const styles = StyleSheet.create({
     fontSize: 10, 
     fontWeight: '600' 
   },
-  esgCard: { 
+  card: { 
     backgroundColor: COLORS.white, 
-    marginHorizontal: SPACING.lg, 
+    marginBottom: SPACING.lg, 
     padding: SPACING.lg, 
     borderRadius: BORDER_RADIUS.lg, 
-    ...SHADOWS.md,
-    marginBottom: SPACING.lg,
-  },
-  esgHeader: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: SPACING.sm,
-    marginBottom: SPACING.md,
-  },
-  esgIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#10b981',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  esgTitle: { 
-    fontSize: TYPOGRAPHY.sizes.lg, 
-    fontWeight: 'bold', 
-    color: '#1e293b',
-    flex: 1,
-  },
-  esgSubtitle: {
-    fontSize: TYPOGRAPHY.sizes.xs,
-    color: '#94a3b8',
-  },
-  esgScoreContainer: { 
-    alignItems: 'center', 
-    marginVertical: SPACING.md 
-  },
-  esgScoreCircle: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    overflow: 'hidden',
-    ...SHADOWS.md,
-  },
-  esgCircleGradient: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  esgScore: { 
-    fontSize: 40, 
-    fontWeight: 'bold', 
-    color: COLORS.white 
-  },
-  esgMax: { 
-    fontSize: TYPOGRAPHY.sizes.md, 
-    color: 'rgba(255,255,255,0.8)' 
-  },
-  esgBreakdown: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    marginTop: SPACING.md,
-    paddingTop: SPACING.md,
-    borderTopWidth: 1,
-    borderTopColor: '#f1f5f9',
-  },
-  esgItem: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: SPACING.xs 
-  },
-  esgDot: { 
-    width: 8, 
-    height: 8, 
-    borderRadius: 4 
-  },
-  esgItemText: { 
-    fontSize: 10, 
-    color: '#64748b' 
-  },
-  esgItemValue: { 
-    fontSize: TYPOGRAPHY.sizes.sm, 
-    fontWeight: 'bold', 
-    color: '#1e293b' 
-  },
-  matchesCard: { 
-    backgroundColor: COLORS.white, 
-    marginHorizontal: SPACING.lg, 
-    padding: SPACING.lg, 
-    borderRadius: BORDER_RADIUS.lg, 
-    ...SHADOWS.md,
-    marginBottom: SPACING.lg,
+    ...SHADOWS.md 
   },
   cardHeader: { 
     flexDirection: 'row', 
@@ -511,15 +313,34 @@ const styles = StyleSheet.create({
     alignItems: 'center', 
     marginBottom: SPACING.md 
   },
-  sectionTitle: { 
+  cardHeaderLeft: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    gap: SPACING.sm 
+  },
+  cardTitle: { 
     fontSize: TYPOGRAPHY.sizes.lg, 
     fontWeight: 'bold', 
-    color: '#1e293b' 
+    color: '#1B2A4A' 
   },
   viewAll: { 
     fontSize: TYPOGRAPHY.sizes.sm, 
-    color: '#6366f1', 
+    color: '#1B2A4A', 
     fontWeight: '500' 
+  },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: SPACING.lg,
+  },
+  emptyStateText: {
+    fontSize: TYPOGRAPHY.sizes.md,
+    color: '#94a3b8',
+    marginTop: SPACING.sm,
+  },
+  emptyStateSubtext: {
+    fontSize: TYPOGRAPHY.sizes.sm,
+    color: '#cbd5e1',
+    marginTop: 2,
   },
   matchItem: { 
     flexDirection: 'row', 
@@ -540,7 +361,7 @@ const styles = StyleSheet.create({
   matchName: { 
     fontSize: TYPOGRAPHY.sizes.md, 
     fontWeight: '500', 
-    color: '#1e293b' 
+    color: '#1B2A4A' 
   },
   matchIndustry: { 
     fontSize: TYPOGRAPHY.sizes.xs, 
@@ -557,22 +378,14 @@ const styles = StyleSheet.create({
     fontSize: TYPOGRAPHY.sizes.sm, 
     fontWeight: 'bold' 
   },
-  matchImpact: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    gap: 4 
+  viewAllButton: { 
+    marginTop: SPACING.md, 
+    alignItems: 'center' 
   },
-  matchImpactText: { 
-    fontSize: 10, 
+  viewAllText: { 
+    color: '#1B2A4A', 
+    fontSize: TYPOGRAPHY.sizes.sm, 
     fontWeight: '500' 
-  },
-  portfolioCard: { 
-    backgroundColor: COLORS.white, 
-    marginHorizontal: SPACING.lg, 
-    marginBottom: SPACING.xxxl, 
-    padding: SPACING.lg, 
-    borderRadius: BORDER_RADIUS.lg, 
-    ...SHADOWS.md,
   },
   portfolioStats: { 
     flexDirection: 'row', 
@@ -587,7 +400,7 @@ const styles = StyleSheet.create({
   portfolioStatValue: { 
     fontSize: TYPOGRAPHY.sizes.lg, 
     fontWeight: 'bold', 
-    color: '#6366f1' 
+    color: '#1B2A4A' 
   },
   portfolioStatLabel: { 
     fontSize: TYPOGRAPHY.sizes.xs, 

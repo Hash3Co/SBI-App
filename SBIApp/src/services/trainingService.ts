@@ -1,5 +1,6 @@
+// src/services/trainingService.ts
 import { apiClient } from './api/client';
-import { Course, Quiz } from '../types';
+import { Course, QuizResult, Certificate } from '../types';
 import { API_ENDPOINTS } from '../config/api';
 
 export interface QuizSubmission {
@@ -7,9 +8,26 @@ export interface QuizSubmission {
   answers: number[];
 }
 
+export interface TrainingProgress {
+  courseId: string;
+  progress: number;
+  completedChapters: string[];
+  totalChapters: number;
+}
+
 class TrainingService {
   async getCourses(): Promise<Course[]> {
     const response = await apiClient.get<Course[]>(API_ENDPOINTS.training.courses);
+    return response.data;
+  }
+
+  async getEnrolledCourses(): Promise<Course[]> {
+    const response = await apiClient.get<Course[]>(`${API_ENDPOINTS.training.courses}enrolled/`);
+    return response.data;
+  }
+
+  async getRecommendedCourses(): Promise<Course[]> {
+    const response = await apiClient.get<Course[]>(`${API_ENDPOINTS.training.courses}recommended/`);
     return response.data;
   }
 
@@ -22,8 +40,8 @@ class TrainingService {
     await apiClient.post(API_ENDPOINTS.training.enroll, { course_id: courseId });
   }
 
-  async getProgress(courseId: string): Promise<{ progress: number; completedChapters: string[] }> {
-    const response = await apiClient.get(`${API_ENDPOINTS.training.progress}?course_id=${courseId}`);
+  async getProgress(courseId: string): Promise<TrainingProgress> {
+    const response = await apiClient.get<TrainingProgress>(`${API_ENDPOINTS.training.progress}?course_id=${courseId}`);
     return response.data;
   }
 
@@ -34,8 +52,8 @@ class TrainingService {
     });
   }
 
-  async submitQuiz(courseId: string, submission: QuizSubmission): Promise<{ passed: boolean; score: number }> {
-    const response = await apiClient.post(API_ENDPOINTS.training.submitQuiz, {
+  async submitQuiz(courseId: string, submission: QuizSubmission): Promise<QuizResult> {
+    const response = await apiClient.post<QuizResult>(API_ENDPOINTS.training.submitQuiz, {
       course_id: courseId,
       chapter_id: submission.chapterId,
       answers: submission.answers,
@@ -43,8 +61,13 @@ class TrainingService {
     return response.data;
   }
 
-  async getCertificate(courseId: string): Promise<{ url: string }> {
-    const response = await apiClient.get(API_ENDPOINTS.training.certificate(courseId));
+  async getCertificate(courseId: string): Promise<Certificate> {
+    const response = await apiClient.get<Certificate>(API_ENDPOINTS.training.certificate(courseId));
+    return response.data;
+  }
+
+  async getCourseCategories(): Promise<string[]> {
+    const response = await apiClient.get<string[]>(`${API_ENDPOINTS.training.courses}categories/`);
     return response.data;
   }
 }

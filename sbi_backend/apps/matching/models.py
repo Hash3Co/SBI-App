@@ -4,79 +4,108 @@ from django.conf import settings
 import uuid
 
 class Match(models.Model):
-    """Connection between SME and Investor"""
+    """Matches between SME and Investor"""
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    sme = models.ForeignKey('sme.SMEProfile', on_delete=models.CASCADE, related_name='matches')
-    investor = models.ForeignKey('investor.InvestorProfile', on_delete=models.CASCADE, related_name='matches')
+    sme = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='sme_matches')
+    investor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='investor_matches')
     
-    match_score = models.DecimalField(max_digits=5, decimal_places=2)  # 0-100
-    match_reasoning = models.JSONField(default=dict)  # Breakdown of why matched
+    match_score = models.IntegerField(default=0)
+    match_breakdown = models.JSONField(default=dict)
     
     STATUS_CHOICES = (
         ('pending', 'Pending'),
         ('accepted', 'Accepted'),
         ('rejected', 'Rejected'),
         ('connected', 'Connected'),
-        ('completed', 'Completed'),
     )
-    
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
     
-    # Communication
-    last_message_at = models.DateTimeField(blank=True, null=True)
-    messages_count = models.IntegerField(default=0)
-    
+    connected_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         db_table = 'matches'
-        unique_together = [['sme', 'investor']]
-        indexes = [
-            models.Index(fields=['sme', 'status']),
-            models.Index(fields=['investor', 'status']),
-            models.Index(fields=['match_score']),
-            models.Index(fields=['created_at']),
-        ]
+        ordering = ['-match_score', '-created_at']
+        unique_together = ['sme', 'investor']
     
     def __str__(self):
-        return f"Match: {self.sme.business_name} - {self.investor.full_name} ({self.match_score}%)"
+        return f"{self.sme.email} - {self.investor.email} - {self.match_score}%"
 
+class MatchPreference(models.Model):
+    """User's match preferences"""
+    
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='match_preferences')
+    
+    industries = models.JSONField(default=list)
+    location = models.CharField(max_length=255, blank=True)
+    funding_range_min = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
+    funding_range_max = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
+    
+    # Weight adjustments
+    industry_weight = models.IntegerField(default=25)
+    location_weight = models.IntegerField(default=15)
+    funding_weight = models.IntegerField(default=20)
+    readiness_weight = models.IntegerField(default=15)
+    interest_weight = models.IntegerField(default=10)
+    impact_weight = models.IntegerField(default=10)
+    
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        db_table = 'match_preferences'
+    
+    def __str__(self):
+        return f"{self.user.email}'s Preferences"
 
 class MatchMessage(models.Model):
-    """Messages between matched SME and Investor"""
+    """Messages between matched parties"""
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     match = models.ForeignKey(Match, on_delete=models.CASCADE, related_name='messages')
-    sender = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    sender = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='sent_match_messages')
+    
     message = models.TextField()
     is_read = models.BooleanField(default=False)
-    read_at = models.DateTimeField(blank=True, null=True)
+    read_at = models.DateTimeField(null=True, blank=True)
+    
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         db_table = 'match_messages'
         ordering = ['created_at']
-        indexes = [
-            models.Index(fields=['match', 'created_at']),
-            models.Index(fields=['sender', 'is_read']),
-        ]
-
+    
+    def __str__(self):
+        return f"{self.sender.email} - {self.match.id} - {self.created_at}"
 
 class MatchingQueue(models.Model):
     """Queue for processing matches asynchronously"""
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    entity_type = models.CharField(max_length=20)  # 'sme' or 'investor'
-    entity_id = models.UUIDField()
-    status = models.CharField(max_length=20, default='pending')
-    processed_at = models.DateTimeField(blank=True, null=True)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='matching_queue')
+    
+    STATUS_CHOICES = (
+        ('pending', 'Pending'),
+        ('processing', 'Processing'),
+        ('completed', 'Completed'),
+        ('failed', 'Failed'),
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    
+    processed_at = models.DateTimeField(null=True, blank=True)
+    error_message = models.TextField(blank=True)
+    
     created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
         db_table = 'matching_queue'
-        indexes = [
-            models.Index(fields=['status', 'created_at']),
-            models.Index(fields=['entity_type', 'entity_id']),
-        ]
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.user.email} - {self.status} - {self.created_at}"

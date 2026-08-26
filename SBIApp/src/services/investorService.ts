@@ -1,6 +1,7 @@
+// src/services/investorService.ts
 import { apiClient } from './api/client';
 import { SecurityUtils } from '../utils/securityUtils';
-import { InvestorProfile, Match, Investment } from '../types';
+import { InvestorProfile, Match, Investment, ImpactMetric } from '../types';
 import { API_ENDPOINTS } from '../config/api';
 
 export interface UpdateInvestorProfileData {
@@ -10,6 +11,14 @@ export interface UpdateInvestorProfileData {
   preferredIndustries?: string[];
   fundingRange?: { min: number; max: number };
   location?: string;
+}
+
+export interface PortfolioSummary {
+  totalInvested: number;
+  activeDeals: number;
+  avgROI: number;
+  impactScore: number;
+  investments: Investment[];
 }
 
 class InvestorService {
@@ -22,8 +31,12 @@ class InvestorService {
     const sanitizedData: any = {};
     if (data.fullName) sanitizedData.full_name = SecurityUtils.sanitizeInput(data.fullName);
     if (data.companyName) sanitizedData.company_name = SecurityUtils.sanitizeInput(data.companyName);
-    if (data.investmentInterests) sanitizedData.investment_interests = data.investmentInterests.map(i => SecurityUtils.sanitizeInput(i));
-    if (data.preferredIndustries) sanitizedData.preferred_industries = data.preferredIndustries.map(i => SecurityUtils.sanitizeInput(i));
+    if (data.investmentInterests) {
+      sanitizedData.investment_interests = data.investmentInterests.map(i => SecurityUtils.sanitizeInput(i));
+    }
+    if (data.preferredIndustries) {
+      sanitizedData.preferred_industries = data.preferredIndustries.map(i => SecurityUtils.sanitizeInput(i));
+    }
     if (data.fundingRange) sanitizedData.funding_range = data.fundingRange;
     if (data.location) sanitizedData.location = SecurityUtils.sanitizeInput(data.location);
     
@@ -36,13 +49,18 @@ class InvestorService {
     return response.data;
   }
 
-  async getPortfolio(): Promise<Investment[]> {
-    const response = await apiClient.get<Investment[]>(API_ENDPOINTS.investor.portfolio);
+  async getPortfolio(): Promise<PortfolioSummary> {
+    const response = await apiClient.get<PortfolioSummary>(API_ENDPOINTS.investor.portfolio);
     return response.data;
   }
 
-  async getImpactMetrics(): Promise<any> {
-    const response = await apiClient.get(API_ENDPOINTS.investor.impactMetrics);
+  async getImpactMetrics(): Promise<ImpactMetric[]> {
+    const response = await apiClient.get<ImpactMetric[]>(API_ENDPOINTS.investor.impactMetrics);
+    return response.data;
+  }
+
+  async getProfileCompletion(): Promise<{ percentage: number; missingFields: string[] }> {
+    const response = await apiClient.get(`${API_ENDPOINTS.investor.profile}completion/`);
     return response.data;
   }
 }

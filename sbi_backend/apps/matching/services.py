@@ -2,7 +2,7 @@ from celery import shared_task
 from django.core.cache import cache
 from django.utils import timezone
 from .models import Match, MatchingQueue
-from .algorithm import MatchingAlgorithm
+from .matching_algorithm import MatchingAlgorithm
 from apps.sme.models import SMEProfile
 from apps.investor.models import InvestorProfile
 

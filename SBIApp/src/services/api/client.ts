@@ -18,13 +18,12 @@ class ApiClient {
       baseURL: API_CONFIG.baseURL,
       timeout: API_CONFIG.timeout,
       headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        'X-Platform': Platform.OS,
-        'X-App-Version': '1.0.0',
+        ...API_CONFIG.headers,
+        'Accept-Language': 'en',
       },
     });
     this.setupInterceptors();
+    this.setupLogging();
   }
 
   static getInstance(): ApiClient {
@@ -34,81 +33,167 @@ class ApiClient {
     return ApiClient.instance;
   }
 
+  private setupLogging(): void {
+    // Log all requests in development
+    if (__DEV__) {
+      this.client.interceptors.request.use(
+        (config) => {
+          console.log(`🌐 API Request: ${config.method?.toUpperCase()} ${config.url}`);
+          return config;
+        },
+        (error) => {
+          console.error('❌ Request Error:', error);
+          return Promise.reject(error);
+        }
+      );
+
+      this.client.interceptors.response.use(
+        (response) => {
+          console.log(`✅ API Response: ${response.status} ${response.config.url}`);
+          return response;
+        },
+        (error) => {
+          if (error.response) {
+            console.error(`❌ API Error: ${error.response.status} ${error.config?.url}`);
+            console.error('Response data:', error.response.data);
+          } else if (error.request) {
+            console.error('❌ No response from server:', error.request);
+          } else {
+            console.error('❌ Request error:', error.message);
+          }
+          return Promise.reject(error);
+        }
+      );
+    }
+  }
+
   private setupInterceptors(): void {
-    // Request interceptor - add auth token
+    // Request interceptor - Add auth token
     this.client.interceptors.request.use(
       async (config: InternalAxiosRequestConfig) => {
         const token = await secureStorage.getToken();
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
+        // Add device info
+        config.headers['X-Device-ID'] = Platform.OS;
+        config.headers['X-Request-ID'] = this.generateRequestId();
         return config;
       },
-      (error) => Promise.reject(error)
+      (error) => {
+        console.error('Request interceptor error:', error);
+        return Promise.reject(error);
+      }
     );
 
-    // Response interceptor - handle token refresh
+    // Response interceptor - Handle token refresh
     this.client.interceptors.response.use(
-      (response) => response,
+      (response) => {
+        // Log successful responses
+        if (__DEV__) {
+          console.log(`✅ ${response.status} ${response.config.url}`);
+        }
+        return response;
+      },
       async (error) => {
         const originalRequest = error.config;
         
-        // If it's not a 401 or it's already a retry, reject
-        if (error.response?.status !== 401 || originalRequest._retry) {
-          return Promise.reject(error);
-        }
-
-        // If refresh is in progress, queue the request
-        if (this.isRefreshing) {
-          return new Promise((resolve, reject) => {
-            this.failedQueue.push({ resolve, reject });
-          })
-            .then(() => this.client(originalRequest))
-            .catch((err) => Promise.reject(err));
-        }
-
-        originalRequest._retry = true;
-        this.isRefreshing = true;
-
-        try {
-          const refreshToken = await secureStorage.getRefreshToken();
-          if (!refreshToken) {
-            throw new Error('No refresh token available');
-          }
-
-          // Attempt to refresh the token
-          const response = await this.client.post('/auth/token/refresh/', {
-            refresh: refreshToken,
+        // Network error - no response from server
+        if (!error.response) {
+          console.error('🌐 Network Error - No response from server');
+          return Promise.reject({
+            message: 'Network error. Please check your connection.',
+            code: 'NETWORK_ERROR',
+            status: 0,
           });
-
-          const newAccessToken = response.data.access || response.data.token;
-          if (newAccessToken) {
-            // Update stored token
-            await secureStorage.setToken(newAccessToken);
-            
-            // Update authorization header
-            originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
-            
-            // Process queued requests
-            this.failedQueue.forEach((promise) => promise.resolve());
-            this.failedQueue = [];
-            
-            // Retry original request
-            return this.client(originalRequest);
-          } else {
-            throw new Error('No token in refresh response');
-          }
-        } catch (refreshError) {
-          // Refresh failed - clear all data and reject queued requests
-          await secureStorage.clearAll();
-          this.failedQueue.forEach((promise) => promise.reject(refreshError));
-          this.failedQueue = [];
-          return Promise.reject(refreshError);
-        } finally {
-          this.isRefreshing = false;
         }
+
+        // Log error response
+        console.error(`❌ Error ${error.response.status}: ${error.response.config?.url}`);
+        console.error('Response data:', error.response.data);
+
+        // Handle 401 - Token expired
+        if (error.response?.status === 401 && !originalRequest._retry) {
+          // Don't attempt refresh for login/register endpoints
+          if (originalRequest.url?.includes('/auth/login') || 
+              originalRequest.url?.includes('/auth/register')) {
+            return Promise.reject(error.response.data);
+          }
+
+          if (this.isRefreshing) {
+            return new Promise((resolve, reject) => {
+              this.failedQueue.push({ resolve, reject });
+            })
+              .then(() => this.client(originalRequest))
+              .catch((err) => Promise.reject(err));
+          }
+
+          originalRequest._retry = true;
+          this.isRefreshing = true;
+
+          try {
+            const refreshToken = await secureStorage.getRefreshToken();
+            if (!refreshToken) {
+              console.error('No refresh token available');
+              await secureStorage.clearAll();
+              return Promise.reject({
+                message: 'Session expired. Please login again.',
+                code: 'SESSION_EXPIRED',
+              });
+            }
+
+            console.log('🔄 Refreshing token...');
+            const response = await this.client.post('/auth/refresh/', {
+              refresh: refreshToken,
+            });
+
+            const newAccessToken = response.data.access || response.data.token;
+            if (newAccessToken) {
+              console.log('✅ Token refreshed successfully');
+              await secureStorage.setToken(newAccessToken);
+              originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
+              
+              // Process queued requests
+              this.failedQueue.forEach((promise) => promise.resolve());
+              this.failedQueue = [];
+              
+              return this.client(originalRequest);
+            }
+            throw new Error('No token in refresh response');
+          } catch (refreshError) {
+            console.error('❌ Token refresh failed:', refreshError);
+            await secureStorage.clearAll();
+            this.failedQueue.forEach((promise) => promise.reject(refreshError));
+            this.failedQueue = [];
+            return Promise.reject({
+              message: 'Session expired. Please login again.',
+              code: 'SESSION_EXPIRED',
+            });
+          } finally {
+            this.isRefreshing = false;
+          }
+        }
+
+        // Handle other errors
+        const errorMessage = error.response?.data?.message || 
+                           error.response?.data?.detail || 
+                           error.response?.data?.error ||
+                           error.response?.data?.non_field_errors?.[0] ||
+                           error.message ||
+                           'An error occurred';
+
+        return Promise.reject({
+          message: errorMessage,
+          status: error.response?.status,
+          data: error.response?.data,
+          code: error.response?.data?.code || 'UNKNOWN_ERROR',
+        });
       }
     );
+  }
+
+  private generateRequestId(): string {
+    return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
   }
 
   getClient(): AxiosInstance {

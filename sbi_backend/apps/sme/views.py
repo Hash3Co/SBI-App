@@ -1,140 +1,177 @@
+# apps/sme/views.py - Complete views
 from rest_framework import generics, status, permissions
 from rest_framework.response import Response
-from rest_framework.parsers import MultiPartParser, FormParser
-from django.db import transaction
-from django.core.cache import cache
-from drf_yasg.utils import swagger_auto_schema
-
-from .models import SMEProfile, SMEDocument, SMEActivityLog
+from rest_framework.views import APIView
+from django.db.models import Q
+from .models import SMEProfile, SMEOnboarding, SMEDocument
 from .serializers import (
-    SMEProfileSerializer, SMEProfileUpdateSerializer,
-    SMEDocumentSerializer, ReadinessScoreSerializer, SMEActivityLogSerializer
+    SMEProfileSerializer, SMEOnboardingSerializer,
+    SMEDocumentSerializer, ReadinessScoreSerializer
 )
-from apps.accounts.permissions import IsSME, IsOwner
-from apps.matching.services import update_match_queue
-from apps.training.services import calculate_readiness_score
+from apps.matching.models import Match
+from apps.training.models import UserProgress
 
-
-class SMEProfileView(generics.RetrieveUpdateAPIView):
-    """Get and update SME profile"""
+class SMEProfileView(generics.RetrieveAPIView):
     serializer_class = SMEProfileSerializer
-    permission_classes = [permissions.IsAuthenticated, IsSME]
+    permission_classes = [permissions.IsAuthenticated]
     
     def get_object(self):
+        user = self.request.user
+        if user.role != 'sme':
+            return Response({'error': 'User is not an SME'}, status=status.HTTP_403_FORBIDDEN)
+        
         profile, created = SMEProfile.objects.get_or_create(
-            user=self.request.user,
+            user=user,
             defaults={
-                'business_name': self.request.user.get_full_name() or 'My Business',
+                'business_name': f"{user.full_name}'s Business",
                 'industry': 'Technology',
-                'location': self.request.user.location_region or 'Unknown',
-                'description': 'Business description coming soon...',
-                'founded_year': 2024,
-                'employee_count': '1-10',
-                'funding_needed': 0,
-                'funding_purpose': 'Business growth'
+                'location': ''
             }
         )
         return profile
     
-    def update(self, request, *args, **kwargs):
-        partial = kwargs.pop('partial', False)
-        instance = self.get_object()
-        serializer = SMEProfileUpdateSerializer(
-            instance, data=request.data, partial=partial
-        )
-        serializer.is_valid(raise_exception=True)
-        self.perform_update(serializer)
+    def get(self, request, *args, **kwargs):
+        profile = self.get_object()
+        serializer = self.get_serializer(profile)
+        data = serializer.data
         
-        # Update match queue after profile update
-        update_match_queue.delay(instance.id, 'sme')
+        # Calculate completion
+        fields = ['business_name', 'industry', 'location', 'description', 'funding_needed']
+        filled = sum(1 for f in fields if profile.__dict__.get(f))
+        data['completion_percentage'] = int((filled / len(fields)) * 100)
+        data['readiness_score'] = profile.get_readiness_score()
         
-        # Log activity
-        SMEActivityLog.objects.create(
-            sme=instance,
-            action='profile_updated',
-            details=request.data,
-            ip_address=self.get_client_ip(request)
-        )
-        
-        # Clear cache
-        cache.delete(f"sme_profile_{instance.id}")
-        
-        return Response(serializer.data)
+        return Response(data)
+
+class UpdateSMEProfileView(generics.UpdateAPIView):
+    serializer_class = SMEProfileSerializer
+    permission_classes = [permissions.IsAuthenticated]
     
-    def get_client_ip(self, request):
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            return x_forwarded_for.split(',')[0]
-        return request.META.get('REMOTE_ADDR')
+    def get_object(self):
+        user = self.request.user
+        if user.role != 'sme':
+            return Response({'error': 'User is not an SME'}, status=status.HTTP_403_FORBIDDEN)
+        return SMEProfile.objects.get_or_create(user=user)[0]
+    
+    def perform_update(self, serializer):
+        profile = serializer.save()
+        profile.update_readiness_score()
 
-
-class ReadinessScoreView(generics.GenericAPIView):
-    """Get funding readiness score"""
-    permission_classes = [permissions.IsAuthenticated, IsSME]
+class SMEStatusView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
     
     def get(self, request):
-        profile = SMEProfile.objects.get(user=request.user)
+        user = request.user
+        if user.role != 'sme':
+            return Response({'error': 'User is not an SME'}, status=status.HTTP_403_FORBIDDEN)
         
-        # Calculate score if not cached
-        cache_key = f"readiness_score_{profile.id}"
-        score_data = cache.get(cache_key)
+        profile = SMEProfile.objects.filter(user=user).first()
+        if not profile:
+            return Response({
+                'status': 'incomplete',
+                'message': 'Please complete your profile'
+            })
         
-        if not score_data:
-            score_data = calculate_readiness_score(profile)
-            cache.set(cache_key, score_data, timeout=3600)
-        
-        serializer = ReadinessScoreSerializer(score_data)
-        return Response(serializer.data)
+        return Response({
+            'status': profile.verification_status,
+            'is_verified': profile.verification_status == 'verified',
+            'readiness_score': profile.get_readiness_score(),
+            'profile_completion': self.get_completion_percentage(profile)
+        })
+    
+    def get_completion_percentage(self, profile):
+        fields = ['business_name', 'industry', 'location', 'description', 'funding_needed']
+        filled = sum(1 for f in fields if getattr(profile, f, None))
+        return int((filled / len(fields)) * 100)
 
+class ReadinessScoreView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        user = request.user
+        if user.role != 'sme':
+            return Response({'error': 'User is not an SME'}, status=status.HTTP_403_FORBIDDEN)
+        
+        profile = SMEProfile.objects.filter(user=user).first()
+        if not profile:
+            return Response({'score': 0, 'message': 'Please complete your profile'})
+        
+        return Response({
+            'score': profile.get_readiness_score(),
+            'categories': self.get_category_scores(profile),
+            'recommendations': self.get_recommendations(profile)
+        })
+    
+    def get_category_scores(self, profile):
+        categories = [
+            {'name': 'Business Plan', 'score': self.calculate_business_score(profile)},
+            {'name': 'Financial Health', 'score': self.calculate_financial_score(profile)},
+            {'name': 'Team Strength', 'score': self.calculate_team_score(profile)},
+            {'name': 'Market Potential', 'score': self.calculate_market_score(profile)},
+        ]
+        return categories
+    
+    def calculate_business_score(self, profile):
+        score = 0
+        if profile.business_name: score += 25
+        if profile.description: score += 25
+        if profile.industry: score += 25
+        if profile.location: score += 25
+        return score
+    
+    def calculate_financial_score(self, profile):
+        score = 0
+        if profile.funding_needed > 0: score += 50
+        if profile.funding_purpose: score += 50
+        return score
+    
+    def calculate_team_score(self, profile):
+        score = 0
+        if profile.employee_count: score += 50
+        if profile.founded_year: score += 50
+        return score
+    
+    def calculate_market_score(self, profile):
+        return 60
+    
+    def get_recommendations(self, profile):
+        recommendations = []
+        if not profile.business_name:
+            recommendations.append('Complete your business name')
+        if not profile.description:
+            recommendations.append('Add a business description')
+        if not profile.funding_needed:
+            recommendations.append('Specify your funding needs')
+        return recommendations
 
-class SMEDocumentView(generics.ListCreateAPIView):
-    """List and upload documents"""
+class SMEDocumentsView(generics.ListCreateAPIView):
     serializer_class = SMEDocumentSerializer
-    permission_classes = [permissions.IsAuthenticated, IsSME]
-    parser_classes = [MultiPartParser, FormParser]
+    permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        profile = SMEProfile.objects.get(user=self.request.user)
-        return SMEDocument.objects.filter(sme=profile)
+        return SMEDocument.objects.filter(sme=self.request.user)
     
     def perform_create(self, serializer):
-        profile = SMEProfile.objects.get(user=self.request.user)
-        serializer.save(sme=profile)
+        serializer.save(sme=self.request.user, uploaded_by=self.request.user)
+
+class SMEMatchesView(generics.ListAPIView):
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        user = request.user
+        if user.role != 'sme':
+            return Response({'error': 'User is not an SME'}, status=status.HTTP_403_FORBIDDEN)
         
-        # Log activity
-        SMEActivityLog.objects.create(
-            sme=profile,
-            action='document_uploaded',
-            details={'document_type': serializer.validated_data.get('document_type')},
-            ip_address=self.get_client_ip(self.request)
-        )
-
-
-class SMEDocumentDetailView(generics.RetrieveDestroyAPIView):
-    """Get or delete document"""
-    serializer_class = SMEDocumentSerializer
-    permission_classes = [permissions.IsAuthenticated, IsSME]
-    
-    def get_queryset(self):
-        profile = SMEProfile.objects.get(user=self.request.user)
-        return SMEDocument.objects.filter(sme=profile)
-    
-    def perform_destroy(self, instance):
-        profile = SMEProfile.objects.get(user=self.request.user)
-        SMEActivityLog.objects.create(
-            sme=profile,
-            action='document_deleted',
-            details={'document_id': str(instance.id)},
-            ip_address=self.get_client_ip(self.request)
-        )
-        instance.delete()
-
-
-class SMEActivityLogView(generics.ListAPIView):
-    """Get SME activity logs"""
-    permission_classes = [permissions.IsAuthenticated, IsSME]
-    serializer_class = SMEActivityLogSerializer
-    
-    def get_queryset(self):
-        profile = SMEProfile.objects.get(user=self.request.user)
-        return SMEActivityLog.objects.filter(sme=profile).order_by('-created_at')[:50]
+        matches = Match.objects.filter(sme=user).order_by('-match_score')
+        return Response({
+            'matches': [
+                {
+                    'id': m.id,
+                    'investor': m.investor.full_name,
+                    'match_score': m.match_score,
+                    'status': m.status,
+                    'created_at': m.created_at
+                }
+                for m in matches
+            ]
+        })

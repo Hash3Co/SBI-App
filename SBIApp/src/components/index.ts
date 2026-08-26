@@ -18,7 +18,7 @@ export { PaymentMethod } from './payment/PaymentMethod';
 
 // Core components
 export { SplashScreen } from './SplashScreen';
-export { Toast, showToast } from './Toast';
+export { ToastContainer as ToastC, showToast } from './Toast';
 export { ErrorBoundary } from './ErrorBoundary';
 export { EmptyState } from './EmptyState';
 export { SkeletonLoader } from './SkeletonLoader';

@@ -1,25 +1,27 @@
-// SMEDashboard.tsx
+// src/screens/sme/SMEDashboard.tsx
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Animated } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useAuth } from '../../context/AuthenticationContext';
+import { useMatching } from '../../context/MatchingContext';
+import { useTraining } from '../../context/TrainingContext';
+import { useNotifications } from '../../context/NotificationContext';
+import { smeService } from '../../services';
 import { COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
-import { Match, Course } from '../../types';
 
 export const SMEDashboard = ({ navigation }: any) => {
   const { user } = useAuth();
-  const [matches, setMatches] = useState<Match[]>([]);
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [readinessScore, setReadinessScore] = useState(65);
+  const { matches, fetchMatches, isLoading: matchesLoading } = useMatching();
+  const { recommendedCourses, isLoading: coursesLoading } = useTraining();
+  const { unreadCount } = useNotifications();
+  const [readinessScore, setReadinessScore] = useState(0);
+  const [profileCompletion, setProfileCompletion] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
-  const [profileCompletion, setProfileCompletion] = useState(60);
   const [fadeAnim] = useState(new Animated.Value(0));
 
   useEffect(() => {
-    // Load matches and courses from API or local storage
-    setMatches([]);
-    setCourses([]);
+    fetchDashboardData();
     Animated.timing(fadeAnim, {
       toValue: 1,
       duration: 400,
@@ -27,18 +29,33 @@ export const SMEDashboard = ({ navigation }: any) => {
     }).start();
   }, []);
 
+  const fetchDashboardData = async () => {
+    try {
+      const [score, completion] = await Promise.all([
+        smeService.getReadinessScore(),
+        smeService.getProfileCompletion(),
+        fetchMatches(),
+      ]);
+      setReadinessScore(score.score || 0);
+      setProfileCompletion(completion.percentage || 0);
+    } catch (error) {
+      console.error('Failed to fetch dashboard data:', error);
+    }
+  };
+
   const onRefresh = async () => {
     setRefreshing(true);
-    await new Promise(resolve => setTimeout(resolve, 1000));
+    await fetchDashboardData();
     setRefreshing(false);
   };
 
   const getScoreColor = (score: number) => score >= 80 ? '#10b981' : score >= 60 ? '#f59e0b' : '#ef4444';
+  
   const quickActions = [
-    { icon: 'search', label: 'Find Investors', color: '#6366f1', onPress: () => navigation.navigate('Matching') },
-    { icon: 'school', label: 'Take Courses', color: '#06b6d4', onPress: () => navigation.navigate('CourseLibrary') },
-    { icon: 'analytics', label: 'Readiness Score', color: '#10b981', onPress: () => navigation.navigate('ReadinessScore') },
-    { icon: 'edit', label: 'Edit Profile', color: '#f59e0b', onPress: () => navigation.navigate('SMEProfile') },
+    { icon: 'search', label: 'Find Investors', color: '#1B2A4A', onPress: () => navigation.navigate('Matching') },
+    { icon: 'school', label: 'Take Courses', color: '#2A3F6A', onPress: () => navigation.navigate('CourseLibrary') },
+    { icon: 'analytics', label: 'Readiness Score', color: '#D4A843', onPress: () => navigation.navigate('ReadinessScore') },
+    { icon: 'edit', label: 'Edit Profile', color: '#3A558A', onPress: () => navigation.navigate('SMEProfile') },
   ];
 
   return (
@@ -48,7 +65,7 @@ export const SMEDashboard = ({ navigation }: any) => {
       showsVerticalScrollIndicator={false}
     >
       <LinearGradient 
-        colors={['#6366f1', '#4f46e5', '#4338ca']} 
+        colors={['#1B2A4A', '#2A3F6A', '#3A558A']} 
         style={styles.header}
         start={{x: 0, y: 0}}
         end={{x: 1, y: 0}}
@@ -61,9 +78,11 @@ export const SMEDashboard = ({ navigation }: any) => {
           <View style={styles.headerActions}>
             <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate('Notifications')}>
               <Icon name="notifications-none" size={24} color={COLORS.white} />
-              <View style={styles.notificationBadge}>
-                <Text style={styles.notificationCount}>3</Text>
-              </View>
+              {unreadCount > 0 && (
+                <View style={styles.notificationBadge}>
+                  <Text style={styles.notificationCount}>{unreadCount}</Text>
+                </View>
+              )}
             </TouchableOpacity>
             <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate('Settings')}>
               <Icon name="settings" size={24} color={COLORS.white} />
@@ -89,7 +108,7 @@ export const SMEDashboard = ({ navigation }: any) => {
             <View style={[styles.scoreProgress, { width: `${readinessScore}%`, backgroundColor: getScoreColor(readinessScore) }]} />
           </View>
           <TouchableOpacity style={styles.improveButton} onPress={() => navigation.navigate('ReadinessScore')}>
-            <LinearGradient colors={[getScoreColor(readinessScore), getScoreColor(readinessScore) + 'CC']} style={styles.improveGradient}>
+            <LinearGradient colors={['#D4A843', '#E8C96A']} style={styles.improveGradient}>
               <Text style={styles.improveButtonText}>Improve Your Score →</Text>
             </LinearGradient>
           </TouchableOpacity>
@@ -109,7 +128,7 @@ export const SMEDashboard = ({ navigation }: any) => {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={styles.cardHeaderLeft}>
-              <Icon name="assignment" size={24} color="#6366f1" />
+              <Icon name="assignment" size={24} color="#1B2A4A" />
               <Text style={styles.cardTitle}>Profile Completion</Text>
             </View>
             <Text style={styles.completionPercent}>{profileCompletion}%</Text>
@@ -123,7 +142,7 @@ export const SMEDashboard = ({ navigation }: any) => {
              'Great! Your profile is complete'}
           </Text>
           <TouchableOpacity style={styles.completeButton} onPress={() => navigation.navigate('SMEProfile')}>
-            <LinearGradient colors={['#6366f1', '#4f46e5']} style={styles.completeGradient}>
+            <LinearGradient colors={['#1B2A4A', '#2A3F6A']} style={styles.completeGradient}>
               <Text style={styles.completeButtonText}>
                 {profileCompletion < 100 ? 'Complete Your Profile' : 'View Profile'}
               </Text>
@@ -134,25 +153,25 @@ export const SMEDashboard = ({ navigation }: any) => {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={styles.cardHeaderLeft}>
-              <Icon name="people" size={24} color="#6366f1" />
+              <Icon name="people" size={24} color="#1B2A4A" />
               <Text style={styles.cardTitle}>Potential Investors</Text>
             </View>
             <Text style={styles.cardCount}>{matches.length} matches</Text>
           </View>
           {matches.length === 0 ? (
             <View style={styles.emptyState}>
-              <Icon name="people" size={48} color="#e2e8f0" />
+              <Icon name="people" size={48} color="#DEE2E6" />
               <Text style={styles.emptyStateText}>No matches yet</Text>
               <Text style={styles.emptyStateSubtext}>Complete your profile to get matched</Text>
             </View>
           ) : (
-            matches.map(match => (
+            matches.slice(0, 3).map(match => (
               <TouchableOpacity key={match.id} style={styles.matchItem} onPress={() => navigation.navigate('Matching')}>
                 <View>
                   <Text style={styles.matchName}>{match.investorProfile?.fullName || 'Investor'}</Text>
                   <Text style={styles.matchScore}>Match: {match.matchScore}%</Text>
                 </View>
-                <Icon name="chevron-right" size={20} color="#94a3b8" />
+                <Icon name="chevron-right" size={20} color="#868E96" />
               </TouchableOpacity>
             ))
           )}
@@ -164,25 +183,25 @@ export const SMEDashboard = ({ navigation }: any) => {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={styles.cardHeaderLeft}>
-              <Icon name="school" size={24} color="#6366f1" />
+              <Icon name="school" size={24} color="#1B2A4A" />
               <Text style={styles.cardTitle}>Recommended for You</Text>
             </View>
-            <Text style={styles.cardCount}>{courses.length} courses</Text>
+            <Text style={styles.cardCount}>{recommendedCourses.length} courses</Text>
           </View>
-          {courses.length === 0 ? (
+          {recommendedCourses.length === 0 ? (
             <View style={styles.emptyState}>
-              <Icon name="school" size={48} color="#e2e8f0" />
+              <Icon name="school" size={48} color="#DEE2E6" />
               <Text style={styles.emptyStateText}>No courses available</Text>
               <Text style={styles.emptyStateSubtext}>Check back later for new recommendations</Text>
             </View>
           ) : (
-            courses.map(course => (
+            recommendedCourses.slice(0, 3).map(course => (
               <TouchableOpacity key={course.id} style={styles.courseItem} onPress={() => navigation.navigate('CourseDetail', { courseId: course.id })}>
                 <View>
                   <Text style={styles.courseTitle}>{course.title}</Text>
                   <Text style={styles.courseDuration}>{course.duration}</Text>
                 </View>
-                <Icon name="play-circle-outline" size={24} color="#6366f1" />
+                <Icon name="play-circle-outline" size={24} color="#1B2A4A" />
               </TouchableOpacity>
             ))
           )}
@@ -196,7 +215,7 @@ export const SMEDashboard = ({ navigation }: any) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
+  container: { flex: 1, backgroundColor: '#F5F7FA' },
   header: { 
     paddingHorizontal: SPACING.xl,
     paddingTop: SPACING.xxxl,
@@ -266,7 +285,7 @@ const styles = StyleSheet.create({
   },
   scoreDetail: {
     fontSize: TYPOGRAPHY.sizes.sm,
-    color: '#6366f1',
+    color: '#1B2A4A',
     fontWeight: '500',
   },
   scoreCircle: { marginVertical: SPACING.md },
@@ -346,7 +365,7 @@ const styles = StyleSheet.create({
   cardTitle: { 
     fontSize: TYPOGRAPHY.sizes.lg, 
     fontWeight: 'bold', 
-    color: '#1e293b' 
+    color: '#1B2A4A' 
   },
   cardCount: {
     fontSize: TYPOGRAPHY.sizes.sm,
@@ -355,7 +374,7 @@ const styles = StyleSheet.create({
   completionPercent: {
     fontSize: TYPOGRAPHY.sizes.lg,
     fontWeight: 'bold',
-    color: '#6366f1',
+    color: '#1B2A4A',
   },
   completionBar: { 
     height: 8, 
@@ -413,7 +432,7 @@ const styles = StyleSheet.create({
   matchName: { 
     fontSize: TYPOGRAPHY.sizes.md, 
     fontWeight: '500', 
-    color: '#1e293b' 
+    color: '#1B2A4A' 
   },
   matchScore: { 
     fontSize: TYPOGRAPHY.sizes.sm, 
@@ -425,7 +444,7 @@ const styles = StyleSheet.create({
     alignItems: 'center' 
   },
   viewAllText: { 
-    color: '#6366f1', 
+    color: '#1B2A4A', 
     fontSize: TYPOGRAPHY.sizes.sm, 
     fontWeight: '500' 
   },
@@ -440,7 +459,7 @@ const styles = StyleSheet.create({
   courseTitle: { 
     fontSize: TYPOGRAPHY.sizes.md, 
     fontWeight: '500', 
-    color: '#1e293b' 
+    color: '#1B2A4A' 
   },
   courseDuration: { 
     fontSize: TYPOGRAPHY.sizes.sm, 

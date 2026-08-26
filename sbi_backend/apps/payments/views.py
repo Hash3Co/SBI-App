@@ -2,188 +2,322 @@
 from rest_framework import generics, status, permissions
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.db.models import Sum
 from django.core.cache import cache
 from django.utils import timezone
 import stripe
+import uuid
+from decimal import Decimal
+from .models import SubscriptionPlan, Transaction, UserSubscription, PaymentMethod, PaymentLog
+from .serializers import (
+    SubscriptionPlanSerializer, TransactionSerializer,
+    UserSubscriptionSerializer, PaymentMethodSerializer
+)
+from apps.accounts.models import UserActivity
 from django.conf import settings
 
-from .models import SubscriptionPlan, Subscription, Transaction, PaymentMethod
-from .serializers import (
-    SubscriptionPlanSerializer, SubscriptionSerializer,
-    TransactionSerializer, PaymentMethodSerializer,
-    CreateSubscriptionSerializer, CancelSubscriptionSerializer
-)
-from apps.accounts.permissions import IsSME, IsInvestor
-
-# Initialize Stripe with better error handling
-try:
-    stripe.api_key = settings.STRIPE_SECRET_KEY
-    print("Stripe initialized successfully")
-except AttributeError:
-    # Set a dummy key if STRIPE_SECRET_KEY is not set
-    stripe.api_key = "sk_test_dummy_key_1234567890"
-    print("Stripe running in dummy mode - no real payments will process")
-
+stripe.api_key = settings.STRIPE_SECRET_KEY
 
 class SubscriptionPlanListView(generics.ListAPIView):
-    """List available subscription plans"""
+    """List all subscription plans"""
+    queryset = SubscriptionPlan.objects.filter(is_active=True)
     serializer_class = SubscriptionPlanSerializer
+    permission_classes = [permissions.AllowAny]
+
+class CurrentSubscriptionView(APIView):
+    """Get current user's subscription"""
     permission_classes = [permissions.IsAuthenticated]
     
-    def get_queryset(self):
-        role = self.request.user.role
-        return SubscriptionPlan.objects.filter(role=role, is_active=True)
-
-
-class CurrentSubscriptionView(generics.RetrieveAPIView):
-    """Get current user subscription"""
-    serializer_class = SubscriptionSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    
-    def get_object(self):
-        try:
-            subscription = Subscription.objects.get(
-                user=self.request.user,
-                status='active',
-                current_period_end__gt=timezone.now()
-            )
-            return subscription
-        except Subscription.DoesNotExist:
-            return None
-    
-    def retrieve(self, request, *args, **kwargs):
-        instance = self.get_object()
-        if instance:
-            serializer = self.get_serializer(instance)
+    def get(self, request):
+        subscription = UserSubscription.objects.filter(
+            user=request.user,
+            status='active'
+        ).first()
+        
+        if subscription:
+            serializer = UserSubscriptionSerializer(subscription)
             return Response(serializer.data)
-        return Response({'subscription': None}, status=200)
+        
+        return Response({
+            'active': False,
+            'message': 'No active subscription'
+        })
 
-
-class CreateSubscriptionView(APIView):
-    """Create a new subscription"""
+class CreatePaymentIntentView(APIView):
+    """Create Stripe payment intent"""
     permission_classes = [permissions.IsAuthenticated]
     
     def post(self, request):
-        # Check if Stripe is configured
-        if not settings.STRIPE_SECRET_KEY or settings.STRIPE_SECRET_KEY.startswith('sk_test_dummy'):
+        plan_id = request.data.get('plan_id')
+        if not plan_id:
             return Response({
-                'error': 'Stripe is not configured. Please set STRIPE_SECRET_KEY in your .env file.',
-                'hint': 'Get test keys from https://dashboard.stripe.com/test/apikeys'
-            }, status=status.HTTP_503_SERVICE_UNAVAILABLE)
-        
-        serializer = CreateSubscriptionSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        
-        plan_id = serializer.validated_data['plan_id']
-        payment_method_id = serializer.validated_data.get('payment_method_id')
+                'error': 'Plan ID is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
         
         try:
             plan = SubscriptionPlan.objects.get(id=plan_id, is_active=True)
+            
+            # Create or get Stripe customer
+            customer = self.get_or_create_customer(request.user)
+            
+            # Create payment intent
+            intent = stripe.PaymentIntent.create(
+                amount=int(plan.price * 100),  # Convert to cents
+                currency='zar',
+                customer=customer.id,
+                metadata={
+                    'user_id': str(request.user.id),
+                    'plan_id': str(plan.id),
+                    'plan_name': plan.name,
+                },
+                payment_method_types=['card'],
+            )
+            
+            # Create transaction record
+            transaction = Transaction.objects.create(
+                user=request.user,
+                type='subscription',
+                amount=plan.price,
+                status='pending',
+                description=f"{plan.name} subscription",
+                reference=f"tx_{uuid.uuid4().hex[:12]}",
+                stripe_payment_intent_id=intent.id,
+                stripe_customer_id=customer.id,
+                metadata={'plan_id': str(plan.id)}
+            )
+            
+            # Log payment intent creation
+            PaymentLog.objects.create(
+                user=request.user,
+                action='intent_created',
+                details={
+                    'plan_id': str(plan.id),
+                    'amount': str(plan.price),
+                    'payment_intent_id': intent.id
+                },
+                ip_address=request.META.get('REMOTE_ADDR'),
+                user_agent=request.META.get('HTTP_USER_AGENT')
+            )
+            
+            return Response({
+                'clientSecret': intent.client_secret,
+                'transaction_id': str(transaction.id),
+                'amount': plan.price,
+                'currency': 'ZAR',
+            })
+            
         except SubscriptionPlan.DoesNotExist:
-            return Response({'error': 'Invalid plan'}, status=404)
+            return Response({
+                'error': 'Plan not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
+    
+    def get_or_create_customer(self, user):
+        try:
+            # Check if customer exists
+            customers = stripe.Customer.list(email=user.email, limit=1)
+            if customers.data:
+                return customers.data[0]
+        except:
+            pass
         
-        # Get or create Stripe customer
-        stripe_customer_id = cache.get(f"stripe_customer_{request.user.id}")
-        
-        if not stripe_customer_id:
-            customer = stripe.Customer.create(
-                email=request.user.email,
-                name=request.user.get_full_name(),
-                metadata={'user_id': str(request.user.id)}
-            )
-            stripe_customer_id = customer.id
-            cache.set(f"stripe_customer_{request.user.id}", stripe_customer_id, timeout=86400)
-        
-        # Create or get payment method
-        if payment_method_id:
-            stripe.PaymentMethod.attach(payment_method_id, customer=stripe_customer_id)
-            stripe.Customer.modify(
-                stripe_customer_id,
-                invoice_settings={'default_payment_method': payment_method_id}
-            )
-        
-        # Create subscription in Stripe
-        stripe_subscription = stripe.Subscription.create(
-            customer=stripe_customer_id,
-            items=[{'price': plan.stripe_price_id}],
-            payment_behavior='default_incomplete',
-            expand=['latest_invoice.payment_intent']
+        # Create new customer
+        return stripe.Customer.create(
+            email=user.email,
+            name=user.full_name,
+            metadata={'user_id': str(user.id)}
         )
-        
-        # Create local subscription record
-        subscription = Subscription.objects.create(
-            user=request.user,
-            plan=plan,
-            stripe_subscription_id=stripe_subscription.id,
-            stripe_customer_id=stripe_customer_id,
-            status='active',
-            current_period_start=timezone.now(),
-            current_period_end=timezone.fromtimestamp(stripe_subscription.current_period_end)
-        )
-        
-        # Create transaction record
-        Transaction.objects.create(
-            user=request.user,
-            subscription=subscription,
-            amount=plan.price,
-            currency='ZAR',
-            type='subscription',
-            status='pending',
-            stripe_payment_intent_id=stripe_subscription.latest_invoice.payment_intent.id,
-            description=f"{plan.name} subscription"
-        )
-        
-        return Response({
-            'subscription_id': str(subscription.id),
-            'client_secret': stripe_subscription.latest_invoice.payment_intent.client_secret
-        }, status=201)
 
-
-class CancelSubscriptionView(APIView):
-    """Cancel current subscription"""
+class ConfirmPaymentView(APIView):
+    """Confirm payment and activate subscription"""
     permission_classes = [permissions.IsAuthenticated]
     
     def post(self, request):
+        payment_intent_id = request.data.get('payment_intent_id')
+        if not payment_intent_id:
+            return Response({
+                'error': 'Payment intent ID is required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
         try:
-            subscription = Subscription.objects.get(
-                user=request.user,
-                status='active'
+            # Get the payment intent from Stripe
+            intent = stripe.PaymentIntent.retrieve(payment_intent_id)
+            
+            if intent.status != 'succeeded':
+                return Response({
+                    'error': f'Payment not successful: {intent.status}'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            # Get transaction
+            transaction = Transaction.objects.get(
+                stripe_payment_intent_id=payment_intent_id
             )
             
-            # Cancel in Stripe
-            if subscription.stripe_subscription_id:
-                try:
-                    stripe.Subscription.delete(subscription.stripe_subscription_id)
-                except stripe.error.StripeError as e:
-                    # Log the error but still cancel locally
-                    print(f"Stripe cancellation error: {e}")
+            # Update transaction
+            transaction.status = 'completed'
+            transaction.completed_at = timezone.now()
+            transaction.save()
             
-            subscription.status = 'canceled'
-            subscription.canceled_at = timezone.now()
-            subscription.save()
+            # Get plan
+            plan_id = intent.metadata.get('plan_id')
+            plan = SubscriptionPlan.objects.get(id=plan_id)
             
-            return Response({'message': 'Subscription cancelled'})
+            # Create or update subscription
+            subscription, created = UserSubscription.objects.get_or_create(
+                user=request.user,
+                defaults={
+                    'plan': plan,
+                    'status': 'active',
+                    'auto_renew': True,
+                    'end_date': timezone.now() + timezone.timedelta(days=30),
+                }
+            )
             
-        except Subscription.DoesNotExist:
-            return Response({'error': 'No active subscription found'}, status=404)
-
+            if not created:
+                subscription.plan = plan
+                subscription.status = 'active'
+                subscription.end_date = timezone.now() + timezone.timedelta(days=30)
+                subscription.save()
+            
+            # Log successful payment
+            PaymentLog.objects.create(
+                user=request.user,
+                action='payment_succeeded',
+                details={
+                    'plan_id': str(plan.id),
+                    'amount': str(transaction.amount),
+                    'payment_intent_id': payment_intent_id
+                },
+                ip_address=request.META.get('REMOTE_ADDR'),
+                user_agent=request.META.get('HTTP_USER_AGENT')
+            )
+            
+            # Log activity
+            UserActivity.objects.create(
+                user=request.user,
+                action='subscribe',
+                ip_address=request.META.get('REMOTE_ADDR'),
+                user_agent=request.META.get('HTTP_USER_AGENT'),
+                details={'plan': plan.name, 'amount': plan.price}
+            )
+            
+            return Response({
+                'success': True,
+                'message': 'Payment confirmed and subscription activated',
+                'subscription': UserSubscriptionSerializer(subscription).data
+            })
+            
+        except Transaction.DoesNotExist:
+            return Response({
+                'error': 'Transaction not found'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_400_BAD_REQUEST)
 
 class TransactionHistoryView(generics.ListAPIView):
-    """Get user transaction history"""
+    """Get user's transaction history"""
     serializer_class = TransactionSerializer
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
         return Transaction.objects.filter(user=self.request.user).order_by('-created_at')
 
+class CancelSubscriptionView(APIView):
+    """Cancel user's subscription"""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request):
+        try:
+            subscription = UserSubscription.objects.get(
+                user=request.user,
+                status='active'
+            )
+            
+            subscription.status = 'cancelled'
+            subscription.cancelled_at = timezone.now()
+            subscription.auto_renew = False
+            subscription.save()
+            
+            # Log cancellation
+            PaymentLog.objects.create(
+                user=request.user,
+                action='subscription_cancelled',
+                details={
+                    'plan_id': str(subscription.plan.id),
+                    'subscription_id': str(subscription.id)
+                },
+                ip_address=request.META.get('REMOTE_ADDR'),
+                user_agent=request.META.get('HTTP_USER_AGENT')
+            )
+            
+            # Log activity
+            UserActivity.objects.create(
+                user=request.user,
+                action='cancel_subscription',
+                ip_address=request.META.get('REMOTE_ADDR'),
+                user_agent=request.META.get('HTTP_USER_AGENT')
+            )
+            
+            return Response({
+                'message': 'Subscription cancelled successfully'
+            })
+            
+        except UserSubscription.DoesNotExist:
+            return Response({
+                'error': 'No active subscription found'
+            }, status=status.HTTP_404_NOT_FOUND)
 
 class PaymentMethodListView(generics.ListCreateAPIView):
-    """List and add payment methods"""
+    """List and create payment methods"""
     serializer_class = PaymentMethodSerializer
     permission_classes = [permissions.IsAuthenticated]
     
     def get_queryset(self):
-        return PaymentMethod.objects.filter(user=self.request.user)
+        return PaymentMethod.objects.filter(user=self.request.user, is_active=True)
     
     def perform_create(self, serializer):
+        # Set other methods as not default if this is default
+        if serializer.validated_data.get('is_default', False):
+            PaymentMethod.objects.filter(user=self.request.user).update(is_default=False)
+        
         serializer.save(user=self.request.user)
+
+class PaymentMethodDetailView(generics.RetrieveDestroyAPIView):
+    """Get and delete payment method"""
+    serializer_class = PaymentMethodSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    lookup_field = 'id'
+    
+    def get_queryset(self):
+        return PaymentMethod.objects.filter(user=self.request.user)
+    
+    def perform_destroy(self, instance):
+        instance.is_active = False
+        instance.save()
+
+class SetDefaultPaymentMethodView(APIView):
+    """Set a payment method as default"""
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request, id):
+        try:
+            method = PaymentMethod.objects.get(id=id, user=request.user)
+            
+            # Reset all other methods
+            PaymentMethod.objects.filter(user=request.user).update(is_default=False)
+            
+            # Set this as default
+            method.is_default = True
+            method.save()
+            
+            return Response({'message': 'Default payment method updated'})
+            
+        except PaymentMethod.DoesNotExist:
+            return Response({
+                'error': 'Payment method not found'
+            }, status=status.HTTP_404_NOT_FOUND)

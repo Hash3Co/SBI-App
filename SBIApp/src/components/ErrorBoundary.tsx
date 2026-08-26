@@ -1,3 +1,4 @@
+// src/components/ErrorBoundary.tsx
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS } from '../constants/theme';
@@ -25,13 +26,17 @@ export class ErrorBoundary extends Component<Props, State> {
     console.error('Uncaught error:', error, errorInfo);
   }
 
+  handleReset = () => {
+    this.setState({ hasError: false, error: null });
+  };
+
   render() {
     if (this.state.hasError) {
       return (
         <View style={styles.container}>
           <Text style={styles.title}>Something went wrong</Text>
           <Text style={styles.message}>{this.state.error?.message || 'An unexpected error occurred'}</Text>
-          <TouchableOpacity style={styles.button} onPress={() => this.setState({ hasError: false, error: null })}>
+          <TouchableOpacity style={styles.button} onPress={this.handleReset}>
             <Text style={styles.buttonText}>Try Again</Text>
           </TouchableOpacity>
         </View>
@@ -42,9 +47,34 @@ export class ErrorBoundary extends Component<Props, State> {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: SPACING.xl, backgroundColor: COLORS.background },
-  title: { fontSize: TYPOGRAPHY.sizes.xl, fontWeight: 'bold', color: COLORS.error, marginBottom: SPACING.md },
-  message: { fontSize: TYPOGRAPHY.sizes.md, color: COLORS.gray600, textAlign: 'center', marginBottom: SPACING.xl },
-  button: { backgroundColor: COLORS.primary, paddingHorizontal: SPACING.xl, paddingVertical: SPACING.md, borderRadius: BORDER_RADIUS.md },
-  buttonText: { color: COLORS.white, fontSize: TYPOGRAPHY.sizes.md, fontWeight: '500' },
+  container: { 
+    flex: 1, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    padding: SPACING.xl, 
+    backgroundColor: COLORS.background 
+  },
+  title: { 
+    fontSize: TYPOGRAPHY.sizes.xl, 
+    fontWeight: 'bold', 
+    color: COLORS.error, 
+    marginBottom: SPACING.md 
+  },
+  message: { 
+    fontSize: TYPOGRAPHY.sizes.md, 
+    color: COLORS.gray600, 
+    textAlign: 'center', 
+    marginBottom: SPACING.xl 
+  },
+  button: { 
+    backgroundColor: COLORS.primary, 
+    paddingHorizontal: SPACING.xl, 
+    paddingVertical: SPACING.md, 
+    borderRadius: BORDER_RADIUS.md 
+  },
+  buttonText: { 
+    color: COLORS.white, 
+    fontSize: TYPOGRAPHY.sizes.md, 
+    fontWeight: '500' 
+  },
 });

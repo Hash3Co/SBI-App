@@ -1,33 +1,35 @@
+# apps/accounts/admin.py
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
-from django.utils.translation import gettext_lazy as _
-from .models import User
+from .models import User, UserActivity
 
 @admin.register(User)
 class CustomUserAdmin(UserAdmin):
-    list_display = ('email', 'get_full_name_display', 'role', 'is_active', 'last_login')
-    list_filter = ('role', 'is_active', 'is_staff', 'created_at')
-    search_fields = ('email', 'first_name', 'last_name', 'phone_number')
-    readonly_fields = ('last_login', 'created_at', 'updated_at')
+    list_display = ('id', 'email', 'full_name', 'role', 'is_verified', 'is_active', 'created_at')
+    list_filter = ('role', 'is_verified', 'is_active', 'created_at')
+    search_fields = ('email', 'full_name', 'phone_number')
+    ordering = ('-created_at',)
+    readonly_fields = ('id', 'created_at', 'updated_at')
     
     fieldsets = (
         (None, {'fields': ('email', 'password')}),
-        (_('Personal info'), {'fields': ('first_name', 'last_name', 'phone_number', 'location_region')}),
-        (_('Role & Status'), {'fields': ('role', 'is_active')}),
-        (_('Permissions'), {'fields': ('is_staff', 'is_superuser', 'groups', 'user_permissions')}),
-        (_('Important dates'), {'fields': ('last_login', 'created_at', 'updated_at')}),
+        ('Personal Info', {'fields': ('full_name', 'phone_number', 'role')}),
+        ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
+        ('Verification', {'fields': ('is_verified', 'verification_token')}),
+        ('Important Dates', {'fields': ('last_login', 'created_at', 'updated_at')}),
     )
     
     add_fieldsets = (
         (None, {
             'classes': ('wide',),
-            'fields': ('email', 'first_name', 'last_name', 'password1', 'password2', 'role'),
+            'fields': ('email', 'full_name', 'password1', 'password2', 'role'),
         }),
     )
-    
+
+@admin.register(UserActivity)
+class UserActivityAdmin(admin.ModelAdmin):
+    list_display = ('user', 'action', 'ip_address', 'created_at')
+    list_filter = ('action', 'created_at')
+    search_fields = ('user__email', 'user__full_name', 'action')
+    readonly_fields = ('user', 'action', 'ip_address', 'user_agent', 'created_at')
     ordering = ('-created_at',)
-    
-    def get_full_name_display(self, obj):
-        """Display user's full name"""
-        return f"{obj.first_name} {obj.last_name}".strip() or "N/A"
-    get_full_name_display.short_description = "Full Name"

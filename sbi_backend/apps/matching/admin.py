@@ -1,64 +1,48 @@
+# apps/matching/admin.py
 from django.contrib import admin
-from .models import Match, MatchMessage, MatchingQueue
-
+from .models import Match, MatchPreference, MatchMessage, MatchingQueue
 
 @admin.register(Match)
 class MatchAdmin(admin.ModelAdmin):
-    list_display = ('sme', 'investor', 'match_score', 'status', 'created_at')
-    list_filter = ('status', 'match_score', 'created_at')
-    search_fields = ('sme__business_name', 'investor__full_name')
-    readonly_fields = ('id', 'match_reasoning', 'created_at', 'updated_at')
+    list_display = ('id', 'sme', 'investor', 'match_score', 'status', 'created_at')
+    list_filter = ('status', 'created_at')
+    search_fields = ('sme__email', 'sme__full_name', 'investor__email', 'investor__full_name')
+    readonly_fields = ('id', 'match_score', 'match_breakdown', 'created_at', 'updated_at')
     
     fieldsets = (
-        ('Parties', {
-            'fields': ('sme', 'investor')
+        ('Match Information', {
+            'fields': ('sme', 'investor', 'match_score', 'match_breakdown', 'status')
         }),
-        ('Match Details', {
-            'fields': ('match_score', 'match_reasoning', 'status')
-        }),
-        ('Communication', {
-            'fields': ('last_message_at', 'messages_count')
+        ('Connection', {
+            'fields': ('connected_at',)
         }),
         ('Timestamps', {
-            'fields': ('created_at', 'updated_at')
+            'fields': ('created_at', 'updated_at'),
+            'classes': ('collapse',)
         }),
     )
-    
-    actions = ['accept_matches', 'reject_matches']
-    
-    def accept_matches(self, request, queryset):
-        updated = queryset.update(status='accepted')
-        self.message_user(request, f'{updated} matches accepted.')
-    accept_matches.short_description = "Accept selected matches"
-    
-    def reject_matches(self, request, queryset):
-        updated = queryset.update(status='rejected')
-        self.message_user(request, f'{updated} matches rejected.')
-    reject_matches.short_description = "Reject selected matches"
 
+@admin.register(MatchPreference)
+class MatchPreferenceAdmin(admin.ModelAdmin):
+    list_display = ('id', 'user', 'location', 'is_active', 'created_at')
+    list_filter = ('is_active', 'created_at')
+    search_fields = ('user__email', 'user__full_name', 'location')
+    readonly_fields = ('id', 'created_at', 'updated_at')
 
 @admin.register(MatchMessage)
 class MatchMessageAdmin(admin.ModelAdmin):
-    list_display = ('match', 'sender', 'message_preview', 'is_read', 'created_at')
+    list_display = ('id', 'match', 'sender', 'message_preview', 'is_read', 'created_at')
     list_filter = ('is_read', 'created_at')
-    search_fields = ('match__sme__business_name', 'match__investor__full_name', 'message')
-    readonly_fields = ('id', 'created_at')
+    search_fields = ('match__id', 'sender__email', 'message')
+    readonly_fields = ('id', 'created_at', 'updated_at')
     
     def message_preview(self, obj):
         return obj.message[:50] + '...' if len(obj.message) > 50 else obj.message
     message_preview.short_description = 'Message'
 
-
 @admin.register(MatchingQueue)
 class MatchingQueueAdmin(admin.ModelAdmin):
-    list_display = ('entity_type', 'entity_id', 'status', 'created_at', 'processed_at')
-    list_filter = ('entity_type', 'status', 'created_at')
-    readonly_fields = ('id', 'entity_type', 'entity_id', 'created_at', 'processed_at')
-    
-    actions = ['process_queue']
-    
-    def process_queue(self, request, queryset):
-        from .tasks import process_match_queue
-        process_match_queue.delay()
-        self.message_user(request, 'Matching queue processing started.')
-    process_queue.short_description = "Process selected queue items"
+    list_display = ('id', 'user', 'status', 'created_at', 'processed_at')
+    list_filter = ('status', 'created_at')
+    search_fields = ('user__email', 'user__full_name')
+    readonly_fields = ('id', 'created_at', 'updated_at', 'processed_at')

@@ -1,17 +1,22 @@
+// src/context/TrainingContext.tsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Course } from '../types';
-import trainingService from '../services/trainingService';
+import { trainingService } from '../services';
+import { Course, QuizResult, Certificate } from '../types';
+import { showToast } from '../components/Toast';
 
 interface TrainingContextType {
   courses: Course[];
   enrolledCourses: Course[];
+  recommendedCourses: Course[];
   isLoading: boolean;
   fetchCourses: () => Promise<void>;
+  fetchEnrolledCourses: () => Promise<void>;
+  fetchRecommendedCourses: () => Promise<void>;
   enrollInCourse: (courseId: string) => Promise<void>;
   updateProgress: (courseId: string, chapterId: string, isCompleted: boolean) => Promise<void>;
-  submitQuiz: (courseId: string, chapterId: string, answers: number[]) => Promise<{ passed: boolean; score: number }>;
-  getCertificate: (courseId: string) => Promise<string>;
+  submitQuiz: (courseId: string, chapterId: string, answers: number[]) => Promise<QuizResult>;
+  getCertificate: (courseId: string) => Promise<Certificate>;
+  getCourseDetail: (courseId: string) => Promise<Course>;
 }
 
 const TrainingContext = createContext<TrainingContextType | undefined>(undefined);
@@ -25,40 +30,61 @@ export const useTraining = () => {
 export const TrainingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [courses, setCourses] = useState<Course[]>([]);
   const [enrolledCourses, setEnrolledCourses] = useState<Course[]>([]);
+  const [recommendedCourses, setRecommendedCourses] = useState<Course[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    fetchCourses();
-    loadEnrolledCourses();
+    loadAllCourses();
   }, []);
 
-  const fetchCourses = async () => {
+  const loadAllCourses = async () => {
     setIsLoading(true);
     try {
-      const fetchedCourses = await trainingService.getCourses();
-      setCourses(fetchedCourses);
+      await Promise.all([
+        fetchCourses(),
+        fetchEnrolledCourses(),
+        fetchRecommendedCourses(),
+      ]);
     } catch (error) {
       console.error('Failed to load courses:', error);
-      setCourses([]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const loadEnrolledCourses = async () => {
+  const fetchCourses = async () => {
     try {
-      const saved = await AsyncStorage.getItem('enrolledCourses');
-      if (saved) {
-        const enrolledIds = JSON.parse(saved);
-        if (Array.isArray(enrolledIds) && enrolledIds.length > 0) {
-          const enrolled = courses.filter(c => enrolledIds.includes(c.id));
-          setEnrolledCourses(enrolled);
-        }
-      }
+      const data = await trainingService.getCourses();
+      setCourses(data);
     } catch (error) {
-      console.error('Failed to load enrolled courses:', error);
+      console.error('Failed to fetch courses:', error);
+      setCourses([]);
+      showToast('Failed to load courses', 'error');
+    }
+  };
+
+  const fetchEnrolledCourses = async () => {
+    try {
+      const data = await trainingService.getEnrolledCourses();
+      setEnrolledCourses(data);
+    } catch (error) {
+      console.error('Failed to fetch enrolled courses:', error);
       setEnrolledCourses([]);
     }
+  };
+
+  const fetchRecommendedCourses = async () => {
+    try {
+      const data = await trainingService.getRecommendedCourses();
+      setRecommendedCourses(data);
+    } catch (error) {
+      console.error('Failed to fetch recommended courses:', error);
+      setRecommendedCourses([]);
+    }
+  };
+
+  const getCourseDetail = async (courseId: string): Promise<Course> => {
+    return await trainingService.getCourseDetail(courseId);
   };
 
   const enrollInCourse = async (courseId: string) => {
@@ -67,16 +93,11 @@ export const TrainingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     setIsLoading(true);
     try {
       await trainingService.enrollInCourse(courseId);
-      
-      const course = courses.find(c => c.id === courseId);
-      if (course) {
-        const updatedCourse = { ...course, isEnrolled: true };
-        const newEnrolled = [...enrolledCourses, updatedCourse];
-        setEnrolledCourses(newEnrolled);
-        await AsyncStorage.setItem('enrolledCourses', JSON.stringify(newEnrolled.map(c => c.id)));
-      }
+      await Promise.all([fetchEnrolledCourses(), fetchCourses(), fetchRecommendedCourses()]);
+      showToast('Successfully enrolled in course!', 'success');
     } catch (error) {
       console.error('Enrollment failed:', error);
+      showToast('Failed to enroll in course', 'error');
       throw error;
     } finally {
       setIsLoading(false);
@@ -89,6 +110,7 @@ export const TrainingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     try {
       await trainingService.completeChapter(courseId, chapterId);
       
+      // Update local state
       const updatedCourses = enrolledCourses.map(course => {
         if (course.id === courseId) {
           const updatedChapters = course.chapters.map(chapter => {
@@ -103,46 +125,51 @@ export const TrainingProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       });
       
       setEnrolledCourses(updatedCourses);
-      await AsyncStorage.setItem(`course_progress_${courseId}`, JSON.stringify({
-        completedChapters: updatedCourses.find(c => c.id === courseId)?.completedChapters,
-        progress: updatedCourses.find(c => c.id === courseId)?.progress,
-      }));
     } catch (error) {
       console.error('Failed to update progress:', error);
+      showToast('Failed to update progress', 'error');
       throw error;
     }
   };
 
-  const submitQuiz = async (courseId: string, chapterId: string, answers: number[]) => {
+  const submitQuiz = async (courseId: string, chapterId: string, answers: number[]): Promise<QuizResult> => {
     if (!courseId || !chapterId || !answers.length) {
       throw new Error('Invalid quiz submission');
     }
     
-    return await trainingService.submitQuiz(courseId, { chapterId, answers });
-  };
-
-  const getCertificate = async (courseId: string): Promise<string> => {
-    if (!courseId) throw new Error('Course ID required');
-    
     try {
-      const response = await trainingService.getCertificate(courseId);
-      return response.url;
+      const result = await trainingService.submitQuiz(courseId, { chapterId, answers });
+      if (result.passed) {
+        showToast(`🎉 Quiz passed! Score: ${result.score}%`, 'success');
+      } else {
+        showToast(`Quiz failed. Score: ${result.score}%`, 'error');
+      }
+      return result;
     } catch (error) {
-      console.error('Failed to get certificate:', error);
+      console.error('Quiz submission failed:', error);
+      showToast('Failed to submit quiz', 'error');
       throw error;
     }
+  };
+
+  const getCertificate = async (courseId: string): Promise<Certificate> => {
+    return await trainingService.getCertificate(courseId);
   };
 
   return (
     <TrainingContext.Provider value={{ 
       courses, 
-      enrolledCourses, 
+      enrolledCourses,
+      recommendedCourses,
       isLoading, 
       fetchCourses,
+      fetchEnrolledCourses,
+      fetchRecommendedCourses,
       enrollInCourse, 
       updateProgress, 
       submitQuiz, 
-      getCertificate 
+      getCertificate,
+      getCourseDetail,
     }}>
       {children}
     </TrainingContext.Provider>

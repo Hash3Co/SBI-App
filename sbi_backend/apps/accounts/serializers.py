@@ -1,98 +1,109 @@
+# apps/accounts/serializers.py
 from rest_framework import serializers
-from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
-
-User = get_user_model()
+from django.core.exceptions import ValidationError
+from .models import User, UserActivity
+import re
 
 class UserSerializer(serializers.ModelSerializer):
-    """Simple user serializer"""
-    full_name = serializers.SerializerMethodField()
-
     class Meta:
         model = User
-        fields = ["id", "email", "full_name", "first_name", "last_name", "role",
-                  "phone_number", "location_region", "created_at"]
-        read_only_fields = ["id", "created_at"]
-
-    def get_full_name(self, obj):
-        return f"{obj.first_name} {obj.last_name}".strip() or obj.email
+        fields = ('id', 'email', 'full_name', 'phone_number', 'role', 
+                  'is_verified', 'is_active', 'created_at', 'updated_at')
+        read_only_fields = ('id', 'is_verified', 'created_at', 'updated_at')
 
 class RegisterSerializer(serializers.ModelSerializer):
-    """Registration serializer - simplified"""
-    password = serializers.CharField(write_only=True, required=True, validators=[validate_password])
+    password = serializers.CharField(write_only=True, required=True)
     password2 = serializers.CharField(write_only=True, required=True)
-    full_name = serializers.CharField(required=True, write_only=True)
-
+    
     class Meta:
         model = User
-        fields = ["email", "full_name", "password", "password2", "role",
-                  "phone_number", "location_region"]
-
+        fields = ('email', 'full_name', 'password', 'password2', 'role', 'phone_number')
+        extra_kwargs = {
+            'email': {'required': True},
+            'full_name': {'required': True},
+        }
+    
     def validate_email(self, value):
+        # Check if email is already taken
         if User.objects.filter(email=value).exists():
-            raise serializers.ValidationError("User with this email already exists")
-        return value.lower()
-
-    def validate(self, data):
-        if data["password"] != data["password2"]:
-            raise serializers.ValidationError({"password2": "Passwords do not match"})
-        return data
-
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value.lower().strip()
+    
+    def validate_full_name(self, value):
+        # Prevent SQL injection and XSS
+        if not re.match(r'^[a-zA-Z\s\-\.\']+$', value):
+            raise serializers.ValidationError("Invalid characters in name.")
+        return value.strip()
+    
+    def validate(self, attrs):
+        if attrs['password'] != attrs['password2']:
+            raise serializers.ValidationError({"password": "Passwords do not match."})
+        
+        # Validate password strength
+        try:
+            validate_password(attrs['password'])
+        except ValidationError as e:
+            raise serializers.ValidationError({"password": e.messages})
+        
+        return attrs
+    
     def create(self, validated_data):
-        validated_data.pop("password2")
-        full_name = validated_data.pop("full_name", "")
-        name_parts = full_name.split(" ", 1)
-        validated_data["first_name"] = name_parts[0]
-        validated_data["last_name"] = name_parts[1] if len(name_parts) > 1 else ""
-
-        if "username" not in validated_data:
-            validated_data["username"] = validated_data["email"].split("@")[0]
-
+        validated_data.pop('password2')
         user = User.objects.create_user(**validated_data)
         return user
 
 class LoginSerializer(serializers.Serializer):
-    """Login serializer"""
     email = serializers.EmailField(required=True)
-    password = serializers.CharField(required=True, write_only=True)
+    password = serializers.CharField(required=True)
+    
+    def validate_email(self, value):
+        return value.lower().strip()
 
-    def validate(self, data):
-        from django.contrib.auth import authenticate
-
-        email = data.get("email")
-        password = data.get("password")
-
-        if email and password:
-            user = authenticate(request=self.context.get("request"), username=email, password=password)
-            if not user:
-                raise serializers.ValidationError("Invalid credentials")
-            if not user.is_active:
-                raise serializers.ValidationError("User account is disabled")
-            data["user"] = user
-            return data
-
-        raise serializers.ValidationError("Must include email and password")
-
-class ChangePasswordSerializer(serializers.Serializer):
-    """Change password serializer"""
-    old_password = serializers.CharField(required=True)
-    new_password = serializers.CharField(required=True, validators=[validate_password])
-    new_password2 = serializers.CharField(required=True)
-
-    def validate(self, data):
-        if data["new_password"] != data["new_password2"]:
-            raise serializers.ValidationError({"new_password2": "Passwords do not match"})
-        return data
-
-class UserProfileSerializer(serializers.ModelSerializer):
-    """Profile update serializer"""
-    full_name = serializers.SerializerMethodField()
-
+class UpdateProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
-        fields = ["id", "email", "full_name", "first_name", "last_name",
-                  "phone_number", "location_region"]
-        read_only_fields = ["id", "email"]
+        fields = ('full_name', 'phone_number')
+        read_only_fields = ('email', 'role')
+    
+    def validate_full_name(self, value):
+        if not re.match(r'^[a-zA-Z\s\-\.\']+$', value):
+            raise serializers.ValidationError("Invalid characters in name.")
+        return value.strip()
 
-    def get_full_name(self, obj):
-        return f"{obj.first_name} {obj.last_name}".strip() or obj.email
+class ChangePasswordSerializer(serializers.Serializer):
+    old_password = serializers.CharField(required=True)
+    new_password = serializers.CharField(required=True)
+    
+    def validate_new_password(self, value):
+        try:
+            validate_password(value)
+        except ValidationError as e:
+            raise serializers.ValidationError(e.messages)
+        return value
+
+class ForgotPasswordSerializer(serializers.Serializer):
+    email = serializers.EmailField(required=True)
+    
+    def validate_email(self, value):
+        return value.lower().strip()
+
+class ResetPasswordSerializer(serializers.Serializer):
+    token = serializers.CharField(required=True)
+    new_password = serializers.CharField(required=True)
+    
+    def validate_new_password(self, value):
+        try:
+            validate_password(value)
+        except ValidationError as e:
+            raise serializers.ValidationError(e.messages)
+        return value
+
+class UserActivitySerializer(serializers.ModelSerializer):
+    user_email = serializers.CharField(source='user.email', read_only=True)
+    
+    class Meta:
+        model = UserActivity
+        fields = ('id', 'user', 'user_email', 'action', 'ip_address', 
+                  'user_agent', 'details', 'created_at')
+        read_only_fields = ('id', 'created_at')
