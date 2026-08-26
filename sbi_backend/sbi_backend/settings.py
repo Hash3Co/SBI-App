@@ -95,8 +95,6 @@ MIDDLEWARE = [
     'django.middleware.http.ConditionalGetMiddleware',
     'django.middleware.locale.LocaleMiddleware',
     
-    # Rate Limiting
-    'django_ratelimit.middleware.RatelimitMiddleware',
     
     # Axes for login protection
     'axes.middleware.AxesMiddleware',
@@ -143,7 +141,6 @@ INSTALLED_APPS = [
     'drf_yasg',
     'django_filters',
     'django_extensions',
-    'django_ratelimit',
     'django_user_agents',
     
     # Custom Apps
@@ -217,11 +214,6 @@ X_FRAME_OPTIONS = 'DENY'
 USE_X_FORWARDED_HOST = True
 SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
-# ============ RATE LIMITING ============
-RATELIMIT_ENABLE = True
-RATELIMIT_USE_CACHE = 'default'
-RATELIMIT_CACHE_PREFIX = 'rl-'
-RATELIMIT_VIEW = 'django_ratelimit.decorators.ratelimit'
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
