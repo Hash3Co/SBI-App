@@ -11,13 +11,15 @@ class InvestorProfile(models.Model):
     company_name = models.CharField(max_length=255, blank=True)
     location = models.CharField(max_length=255, blank=True)
     
+    # Investment Preferences
     investment_interests = models.JSONField(default=list)
     preferred_industries = models.JSONField(default=list)
+    
+    # Funding Range
     funding_range_min = models.DecimalField(max_digits=15, decimal_places=2, default=0)
     funding_range_max = models.DecimalField(max_digits=15, decimal_places=2, default=1000000)
     
     portfolio_value = models.DecimalField(max_digits=15, decimal_places=2, default=0)
-    
     verification_status = models.CharField(max_length=20, default='pending')
     
     created_at = models.DateTimeField(auto_now_add=True)
@@ -40,7 +42,14 @@ class Investment(models.Model):
     equity = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     roi = models.DecimalField(max_digits=5, decimal_places=2, default=0)
     
-    status = models.CharField(max_length=20, default='pending')
+    STATUS_CHOICES = (
+        ('pending', 'Pending'),
+        ('active', 'Active'),
+        ('completed', 'Completed'),
+        ('declined', 'Declined'),
+    )
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    
     date = models.DateTimeField(auto_now_add=True)
     notes = models.TextField(blank=True)
     

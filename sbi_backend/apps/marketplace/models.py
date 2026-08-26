@@ -59,7 +59,6 @@ class MarketplaceResource(models.Model):
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-    published_at = models.DateTimeField(null=True, blank=True)
     
     class Meta:
         db_table = 'marketplace_resources'
@@ -67,14 +66,6 @@ class MarketplaceResource(models.Model):
     
     def __str__(self):
         return self.title
-    
-    def increment_views(self):
-        self.views += 1
-        self.save()
-    
-    def increment_saves(self):
-        self.saves += 1
-        self.save()
 
 class TradeRequest(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

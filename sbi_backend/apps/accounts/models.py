@@ -54,14 +54,13 @@ class User(AbstractBaseUser, PermissionsMixin):
     # Session management - ALLOW NULL
     last_login = models.DateTimeField(null=True, blank=True)
     last_ip = models.GenericIPAddressField(null=True, blank=True)
-    last_user_agent = models.TextField(blank=True, null=True)  # Changed to allow null
+    last_user_agent = models.TextField(blank=True, null=True)
     session_key = models.CharField(max_length=255, blank=True, null=True)
     
     # Account lockout
     failed_login_attempts = models.IntegerField(default=0)
     locked_until = models.DateTimeField(null=True, blank=True)
     
-    # Audit fields
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     deleted_at = models.DateTimeField(null=True, blank=True)
@@ -84,7 +83,6 @@ class User(AbstractBaseUser, PermissionsMixin):
     
     def check_password(self, raw_password):
         return bcrypt.checkpw(raw_password.encode('utf-8'), self.password.encode('utf-8'))
-
     
 class UserActivity(models.Model):
     ACTION_CHOICES = (
@@ -107,7 +105,7 @@ class UserActivity(models.Model):
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='user_activities')
-    action = models.CharField(max_length=50, choices=ACTION_CHOICES, db_index=True)
+    action = models.CharField(max_length=50, db_index=True)
     ip_address = models.GenericIPAddressField(null=True, blank=True)
     user_agent = models.TextField(blank=True)
     details = models.JSONField(default=dict, blank=True)
@@ -116,10 +114,6 @@ class UserActivity(models.Model):
     class Meta:
         db_table = 'user_activities'
         ordering = ['-created_at']
-        indexes = [
-            models.Index(fields=['user', 'action']),
-            models.Index(fields=['created_at']),
-        ]
     
     def __str__(self):
         return f"{self.user.email} - {self.action} - {self.created_at}"

@@ -8,37 +8,38 @@ class SMEProfile(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='sme_profile')
     
+    # Business Information
     business_name = models.CharField(max_length=255)
     industry = models.CharField(max_length=100)
     location = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     
+    # Business Details
     founded_year = models.IntegerField(null=True, blank=True)
     employee_count = models.CharField(max_length=50, blank=True)
+    
+    # Funding Information
     funding_needed = models.DecimalField(max_digits=15, decimal_places=2, default=0)
     funding_purpose = models.TextField(blank=True)
-    
     financials = models.JSONField(default=dict, blank=True)
     
-    VERIFICATION_STATUS = (
-        ('pending', 'Pending'),
-        ('verified', 'Verified'),
-        ('rejected', 'Rejected'),
-    )
-    verification_status = models.CharField(max_length=20, choices=VERIFICATION_STATUS, default='pending')
+    # Status
+    verification_status = models.CharField(max_length=20, default='pending')
     readiness_score = models.IntegerField(default=0)
     
+    # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
     class Meta:
-        ordering = ['-created_at']
         db_table = 'sme_profiles'
+        ordering = ['-created_at']
     
     def __str__(self):
         return self.business_name
     
-    def get_readiness_score(self):
+    def calculate_readiness_score(self):
+        """Calculate readiness score based on profile completeness"""
         score = 0
         if self.business_name: score += 10
         if self.industry: score += 10
@@ -52,7 +53,7 @@ class SMEProfile(models.Model):
         return score
     
     def update_readiness_score(self):
-        self.readiness_score = self.get_readiness_score()
+        self.readiness_score = self.calculate_readiness_score()
         self.save()
 
 class SMEOnboarding(models.Model):
@@ -82,13 +83,10 @@ class SMEOnboarding(models.Model):
 class SMEDocument(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     sme = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='sme_documents')
-    
     name = models.CharField(max_length=255)
     document_type = models.CharField(max_length=50)
     file = models.FileField(upload_to='sme/documents/')
-    
     uploaded_at = models.DateTimeField(auto_now_add=True)
-    uploaded_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, related_name='uploaded_sme_documents')
     
     class Meta:
         db_table = 'sme_documents'

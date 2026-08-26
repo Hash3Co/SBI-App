@@ -27,9 +27,6 @@ class SubscriptionPlan(models.Model):
     )
     role = models.CharField(max_length=20, choices=ROLE_CHOICES, default='all')
     
-    stripe_price_id = models.CharField(max_length=255, blank=True, null=True)
-    stripe_product_id = models.CharField(max_length=255, blank=True, null=True)
-    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -58,8 +55,6 @@ class UserSubscription(models.Model):
     cancelled_at = models.DateTimeField(null=True, blank=True)
     
     auto_renew = models.BooleanField(default=True)
-    
-    stripe_subscription_id = models.CharField(max_length=255, blank=True, null=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -97,12 +92,6 @@ class Transaction(models.Model):
     
     description = models.CharField(max_length=255)
     reference = models.CharField(max_length=255, unique=True)
-    
-    stripe_payment_intent_id = models.CharField(max_length=255, blank=True, null=True)
-    stripe_customer_id = models.CharField(max_length=255, blank=True, null=True)
-    stripe_subscription_id = models.CharField(max_length=255, blank=True, null=True)
-    
-    metadata = models.JSONField(default=dict, blank=True)
     
     created_at = models.DateTimeField(auto_now_add=True)
     completed_at = models.DateTimeField(null=True, blank=True)
