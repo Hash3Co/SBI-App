@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   Animated,
+  Alert,
 } from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import Icon from 'react-native-vector-icons/MaterialIcons';
@@ -17,8 +18,16 @@ import { useNotifications } from '../../context/NotificationContext';
 import { investorService } from '../../services';
 import { COLORS, SPACING, TYPOGRAPHY, BORDER_RADIUS, SHADOWS } from '../../constants/theme';
 
+// ✅ DEFAULT METRICS
+const DEFAULT_METRICS = [
+  { title: 'Jobs Created', value: '0', change: '+0%', icon: 'work', color: '#1B2A4A' },
+  { title: 'SMEs Supported', value: '0', change: '+0%', icon: 'store', color: '#2A3F6A' },
+  { title: 'CO₂ Reduced', value: '0', change: '+0%', icon: 'eco', color: '#3A558A' },
+  { title: 'Women-Led', value: '0', change: '+0%', icon: 'female', color: '#D4A843' },
+];
+
 export const InvestorDashboard = ({ navigation }: any) => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth(); // ✅ Get logout function
   const { suggestions, fetchSuggestions } = useMatching();
   const { unreadCount } = useNotifications();
   const [refreshing, setRefreshing] = useState(false);
@@ -28,14 +37,7 @@ export const InvestorDashboard = ({ navigation }: any) => {
     avgROI: 0,
     impactScore: 0,
   });
-  
-  // ✅ Ensure impactMetrics is always an array
-  const [impactMetrics, setImpactMetrics] = useState([
-    { title: 'Jobs Created', value: '0', change: '+0%', icon: 'work', color: '#1B2A4A' },
-    { title: 'SMEs Supported', value: '0', change: '+0%', icon: 'store', color: '#2A3F6A' },
-    { title: 'CO₂ Reduced', value: '0', change: '+0%', icon: 'eco', color: '#3A558A' },
-    { title: 'Women-Led', value: '0', change: '+0%', icon: 'female', color: '#D4A843' },
-  ]);
+  const [impactMetrics, setImpactMetrics] = useState(DEFAULT_METRICS);
   const [fadeAnim] = useState(new Animated.Value(0));
 
   useEffect(() => {
@@ -47,35 +49,69 @@ export const InvestorDashboard = ({ navigation }: any) => {
     }).start();
   }, []);
 
+  // ✅ LOGOUT FUNCTION
+  const handleLogout = () => {
+    Alert.alert(
+      'Logout',
+      'Are you sure you want to logout?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Logout', 
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await logout();
+              // ✅ Navigation will be handled by AuthContext
+              // The app will automatically redirect to login
+            } catch (error) {
+              Alert.alert('Error', 'Failed to logout. Please try again.');
+            }
+          }
+        }
+      ]
+    );
+  };
+
   const fetchDashboardData = async () => {
     try {
-      const [portfolio, metrics] = await Promise.all([
+      const results = await Promise.allSettled([
         investorService.getPortfolio().catch(() => ({ totalInvested: 0, activeDeals: 0, avgROI: 0, impactScore: 0 })),
         investorService.getImpactMetrics().catch(() => []),
-        fetchSuggestions().catch(() => []),
+        fetchSuggestions?.()?.catch(() => []) || Promise.resolve([]),
       ]);
 
-      setPortfolioStats({
-        totalInvested: portfolio?.totalInvested || 0,
-        activeDeals: portfolio?.activeDeals || 0,
-        avgROI: portfolio?.avgROI || 0,
-        impactScore: portfolio?.impactScore || 0,
-      });
-
-      // ✅ SAFE: Check if metrics is an array before mapping
-      if (metrics && Array.isArray(metrics) && metrics.length > 0) {
-        setImpactMetrics(metrics.map((m: any) => ({
-          title: m.title || 'Unknown',
-          value: m.value || '0',
-          change: `+${m.change || 0}%`,
-          icon: m.icon || 'circle',
-          color: m.color || '#1B2A4A',
-        })));
+      const portfolioResult = results[0];
+      if (portfolioResult.status === 'fulfilled' && portfolioResult.value) {
+        setPortfolioStats({
+          totalInvested: portfolioResult.value.totalInvested || 0,
+          activeDeals: portfolioResult.value.activeDeals || 0,
+          avgROI: portfolioResult.value.avgROI || 0,
+          impactScore: portfolioResult.value.impactScore || 0,
+        });
       }
-      // If metrics is empty or not an array, keep default values
+
+      const metricsResult = results[1];
+      if (metricsResult.status === 'fulfilled') {
+        const metricsData = metricsResult.value;
+        if (metricsData && Array.isArray(metricsData) && metricsData.length > 0) {
+          const mappedMetrics = metricsData.map((m: any) => ({
+            title: m?.title || 'Unknown',
+            value: m?.value || '0',
+            change: m?.change ? `+${m.change}%` : '+0%',
+            icon: m?.icon || 'circle',
+            color: m?.color || '#1B2A4A',
+          }));
+          setImpactMetrics(mappedMetrics);
+        } else {
+          setImpactMetrics(DEFAULT_METRICS);
+        }
+      } else {
+        setImpactMetrics(DEFAULT_METRICS);
+      }
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
-      // Keep default values
+      setImpactMetrics(DEFAULT_METRICS);
     }
   };
 
@@ -85,25 +121,86 @@ export const InvestorDashboard = ({ navigation }: any) => {
     setRefreshing(false);
   };
 
-  // ✅ Ensure we're always rendering with valid data
   const renderMetrics = () => {
-    return impactMetrics.map((metric, index) => (
+    const metrics = Array.isArray(impactMetrics) ? impactMetrics : DEFAULT_METRICS;
+    
+    if (metrics.length === 0) {
+      return DEFAULT_METRICS.map((metric, index) => (
+        <View key={`default-${index}`} style={styles.metricCard}>
+          <LinearGradient
+            colors={[metric.color + '15', metric.color + '05']}
+            style={styles.metricGradient}
+          >
+            <View style={[styles.metricIcon, { backgroundColor: metric.color + '20' }]}>
+              <Icon name={metric.icon} size={20} color={metric.color} />
+            </View>
+            <Text style={styles.metricValue}>{metric.value}</Text>
+            <Text style={styles.metricTitle}>{metric.title}</Text>
+            <View style={[styles.metricChange, { backgroundColor: metric.color + '15' }]}>
+              <Icon name="trending-up" size={12} color={metric.color} />
+              <Text style={[styles.metricChangeText, { color: metric.color }]}>{metric.change}</Text>
+            </View>
+          </LinearGradient>
+        </View>
+      ));
+    }
+
+    return metrics.map((metric, index) => (
       <View key={index} style={styles.metricCard}>
         <LinearGradient
           colors={[metric.color + '15', metric.color + '05']}
           style={styles.metricGradient}
         >
           <View style={[styles.metricIcon, { backgroundColor: metric.color + '20' }]}>
-            <Icon name={metric.icon} size={20} color={metric.color} />
+            <Icon name={metric.icon || 'circle'} size={20} color={metric.color} />
           </View>
-          <Text style={styles.metricValue}>{metric.value}</Text>
-          <Text style={styles.metricTitle}>{metric.title}</Text>
+          <Text style={styles.metricValue}>{metric.value || '0'}</Text>
+          <Text style={styles.metricTitle}>{metric.title || 'Unknown'}</Text>
           <View style={[styles.metricChange, { backgroundColor: metric.color + '15' }]}>
             <Icon name="trending-up" size={12} color={metric.color} />
-            <Text style={[styles.metricChangeText, { color: metric.color }]}>{metric.change}</Text>
+            <Text style={[styles.metricChangeText, { color: metric.color }]}>
+              {metric.change || '+0%'}
+            </Text>
           </View>
         </LinearGradient>
       </View>
+    ));
+  };
+
+  const renderSuggestions = () => {
+    const items = Array.isArray(suggestions) ? suggestions : [];
+    
+    if (items.length === 0) {
+      return (
+        <View style={styles.emptyState}>
+          <Icon name="people" size={48} color="#DEE2E6" />
+          <Text style={styles.emptyStateText}>No suggestions yet</Text>
+          <Text style={styles.emptyStateSubtext}>We'll find matches for you soon</Text>
+        </View>
+      );
+    }
+
+    return items.slice(0, 3).map((item: any) => (
+      <TouchableOpacity
+        key={item?.id || Math.random()}
+        style={styles.matchItem}
+        onPress={() => navigation.navigate('Matching')}
+      >
+        <View style={[styles.matchIcon, { backgroundColor: '#1B2A4A' + '20' }]}>
+          <Icon name="business" size={20} color="#1B2A4A" />
+        </View>
+        <View style={styles.matchInfo}>
+          <Text style={styles.matchName}>{item?.name || 'Unknown'}</Text>
+          <Text style={styles.matchIndustry}>{item?.industry || 'N/A'}</Text>
+        </View>
+        <View style={styles.matchStats}>
+          <View style={[styles.matchScoreContainer, { backgroundColor: '#1B2A4A' + '15' }]}>
+            <Text style={[styles.matchScore, { color: '#1B2A4A' }]}>
+              {item?.matchScore || 0}%
+            </Text>
+          </View>
+        </View>
+      </TouchableOpacity>
     ));
   };
 
@@ -127,14 +224,18 @@ export const InvestorDashboard = ({ navigation }: any) => {
           <View style={styles.headerActions}>
             <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate('Notifications')}>
               <Icon name="notifications-none" size={24} color={COLORS.white} />
-              {unreadCount > 0 && (
+              {(unreadCount || 0) > 0 && (
                 <View style={styles.notificationBadge}>
-                  <Text style={styles.notificationCount}>{unreadCount}</Text>
+                  <Text style={styles.notificationCount}>{unreadCount || 0}</Text>
                 </View>
               )}
             </TouchableOpacity>
             <TouchableOpacity style={styles.iconButton} onPress={() => navigation.navigate('InvestorProfile')}>
               <Icon name="account-circle" size={28} color={COLORS.white} />
+            </TouchableOpacity>
+            {/* ✅ LOGOUT BUTTON - Added to header */}
+            <TouchableOpacity style={styles.iconButton} onPress={handleLogout}>
+              <Icon name="logout" size={24} color={COLORS.white} />
             </TouchableOpacity>
           </View>
         </View>
@@ -145,7 +246,6 @@ export const InvestorDashboard = ({ navigation }: any) => {
           {renderMetrics()}
         </View>
 
-        {/* Rest of your dashboard content */}
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <View style={styles.cardHeaderLeft}>
@@ -156,34 +256,7 @@ export const InvestorDashboard = ({ navigation }: any) => {
               <Text style={styles.viewAll}>View All</Text>
             </TouchableOpacity>
           </View>
-          {!suggestions || suggestions.length === 0 ? (
-            <View style={styles.emptyState}>
-              <Icon name="people" size={48} color="#DEE2E6" />
-              <Text style={styles.emptyStateText}>No suggestions yet</Text>
-              <Text style={styles.emptyStateSubtext}>We'll find matches for you soon</Text>
-            </View>
-          ) : (
-            suggestions.slice(0, 3).map((item: any) => (
-              <TouchableOpacity
-                key={item.id}
-                style={styles.matchItem}
-                onPress={() => navigation.navigate('Matching')}
-              >
-                <View style={[styles.matchIcon, { backgroundColor: '#1B2A4A' + '20' }]}>
-                  <Icon name="business" size={20} color="#1B2A4A" />
-                </View>
-                <View style={styles.matchInfo}>
-                  <Text style={styles.matchName}>{item.name}</Text>
-                  <Text style={styles.matchIndustry}>{item.industry}</Text>
-                </View>
-                <View style={styles.matchStats}>
-                  <View style={[styles.matchScoreContainer, { backgroundColor: '#1B2A4A' + '15' }]}>
-                    <Text style={[styles.matchScore, { color: '#1B2A4A' }]}>{item.matchScore}%</Text>
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))
-          )}
+          {renderSuggestions()}
           <TouchableOpacity style={styles.viewAllButton} onPress={() => navigation.navigate('Matching')}>
             <Text style={styles.viewAllText}>View All Matches</Text>
           </TouchableOpacity>
@@ -193,17 +266,19 @@ export const InvestorDashboard = ({ navigation }: any) => {
           <Text style={styles.cardTitle}>Portfolio Summary</Text>
           <View style={styles.portfolioStats}>
             <View style={styles.portfolioStat}>
-              <Text style={styles.portfolioStatValue}>M {portfolioStats.totalInvested.toLocaleString()}</Text>
+              <Text style={styles.portfolioStatValue}>
+                M {(portfolioStats.totalInvested || 0).toLocaleString()}
+              </Text>
               <Text style={styles.portfolioStatLabel}>Total Invested</Text>
             </View>
             <View style={styles.portfolioDivider} />
             <View style={styles.portfolioStat}>
-              <Text style={styles.portfolioStatValue}>{portfolioStats.activeDeals}</Text>
+              <Text style={styles.portfolioStatValue}>{portfolioStats.activeDeals || 0}</Text>
               <Text style={styles.portfolioStatLabel}>Active Deals</Text>
             </View>
             <View style={styles.portfolioDivider} />
             <View style={styles.portfolioStat}>
-              <Text style={styles.portfolioStatValue}>{portfolioStats.avgROI}%</Text>
+              <Text style={styles.portfolioStatValue}>{portfolioStats.avgROI || 0}%</Text>
               <Text style={styles.portfolioStatLabel}>Avg ROI</Text>
             </View>
           </View>
@@ -219,7 +294,7 @@ export const InvestorDashboard = ({ navigation }: any) => {
   );
 };
 
-// Keep your existing styles...
+// Keep your existing styles (they're fine)
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F7FA' },
   header: {
